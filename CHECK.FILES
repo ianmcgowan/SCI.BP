@@ -1,0 +1,75 @@
+***************************************************************************
+* Program: TRIN.CHECK.FILES
+* Author : Ian McG
+* Date   :
+* Edited : 09:39:12 Jan 02 1999 By MCGOWAN
+* Comment: Check an item to see which atb's are files (use strings to
+*          genererate the item from a program for e.g)
+***************************************************************************
+OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
+PARAM.CTR=1 ; PROG.FLAG=0 ; FILE.FLAG=0 ; ALL.FLAG=0
+SEARCH.FLAG=0
+LOOP
+   P=FIELD(@SENTENCE,' ',PARAM.CTR)
+UNTIL P='' DO
+   IF P[1,1] = '/' THEN
+      PARAM=FIELD(P,'=',2)
+      P=P[2,1]
+      BEGIN CASE
+         CASE P='P'
+            PROG.FLAG=1
+         CASE P='F'
+            FILE.FLAG=1
+         CASE P='A'
+            ALL.FLAG=1
+         CASE P='S'
+            SEARCH.FLAG=1
+            SEARCH.FOR=PARAM
+      END CASE
+   END ELSE
+      PROG=P
+   END
+   PARAM.CTR += 1
+REPEAT
+IF PROG # '' THEN
+   READ CAT.PTR FROM VOC, PROG ELSE PRINT 'Cannot read VOC ':PROG ; STOP
+END ELSE
+   LOOP
+      PRINT 'Enter the program to scan ':
+      INPUT PROG
+      IF PROG = '' OR PROG = '/' THEN STOP
+      READ CAT.PTR FROM VOC, PROG THEN EXIT
+      PRINT 'Cannot read VOC ':PROG
+   REPEAT
+END
+
+IF ALL.FLAG THEN
+   EXECUTE "!strings ":CAT.PTR<2>:" | less"
+END ELSE
+   EXECUTE "!strings ":CAT.PTR<2>:" > $HOME/FILE.LIST"
+END
+
+FILE="HOME.":UPCASE(@LOGNAME)
+OPEN FILE TO HOME.F ELSE STOP 201, FILE
+
+FILE.LIST=''
+READ R FROM HOME.F, 'FILE.LIST' THEN
+   I=DCOUNT(R,@AM)
+   FOR F=1 TO I
+      TEST.FILE=R<F>
+      IF FILE.FLAG THEN
+         OPEN TEST.FILE TO DUMMY THEN
+            PRINT 'FILE: ':TEST.FILE
+            FILE.LIST<-1>=TEST.FILE
+            IF SEARCH.FLAG THEN
+               EXECUTE \SF \:TEST.FILE:\ \:SEARCH.FOR
+            END
+         END
+      END
+      IF PROG.FLAG THEN
+         READV DUMMY FROM VOC, TEST.FILE,1 THEN
+            IF DUMMY = 'C' THEN PRINT 'PROG: ':TEST.FILE
+         END
+      END
+   NEXT F
+END
