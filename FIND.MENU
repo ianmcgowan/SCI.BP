@@ -1,0 +1,24 @@
+*SPLC**********************************************************************
+*                                                                         *
+*   Program Title    : FIND.MENU                                          *
+*   Author           : Ian McGowan                                        *
+*   Date Started     : January 11, 1991                                   *
+*   Last Modified    : 14:22:26  17 MAY 1991 By Ian                       *
+*   Description      : Given a string will go and look in menu file and   *
+*                    : show menu tree of how to get to that string        *
+*                    :                                                    *
+*   Comments         : Most of the work is done in recursive subroutine   *
+*                    : SPLC-BP,SUBS SPLC.SEARCH.MENU                      *
+*   Usage            : FIND.MENU <search string>                          *
+*                                                                         *
+***************************************************************************
+OPEN "DB.MENUS" TO MENU.F ELSE STOP 201,"DB.MENUS"
+
+STR=FIELD(@SENTENCE,' ',2)
+IF STR='' THEN
+   PRINT "Enter menu or program to search for : ": ; INPUT STR
+   IF STR="" OR STR="/" THEN STOP
+END
+
+PATH = '' ; MENU = 1 ; STR = OCONV(STR,"MCU")
+CALL SPLC.SEARCH.MENU(MENU,STR,MENU.F,PATH)
