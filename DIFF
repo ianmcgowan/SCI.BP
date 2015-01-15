@@ -1,0 +1,72 @@
+***************************************************************************
+* Program: DIFF
+* Author : Ian McGowan
+* Date   : 04/04/2013
+* Checkin: $Id: $
+* Comment: Diff two items, in the same file
+***************************************************************************
+PROMPT ""
+ARGS="";PARAMS="";OPTIONS=""
+CALL TRIN.GET.ARGS(@SENTENCE, ARGS, PARAMS, OPTIONS)
+
+LOCATE "D" IN PARAMS<1> SETTING POS THEN DIFF.ONLY=1 ELSE DIFF.ONLY=0
+FILENAME=ARGS<1,1>
+ITEM1=ARGS<1,2>
+ITEM2=ARGS<1,3>
+
+IF ITEM2="" THEN STOP "Usage: TRIN.DIFF FILENAME ITEM1 ITEM2 {/D}"
+
+OPEN FILENAME TO F ELSE STOP 401, FILENAME
+READ R1 FROM F, ITEM1 ELSE STOP "Cannot read ":FILENAME:" ":ITEM1
+READ R2 FROM F, ITEM2 ELSE STOP "Cannot read ":FILENAME:" ":ITEM2
+
+L1=DCOUNT(R1,@AM)
+L2=DCOUNT(R2,@AM)
+IF L1>L2 THEN MAX=L1 ELSE MAX=L2
+
+PRINT.CTR=0
+FOR I=1 TO MAX
+    IF R1<I>#R2<I> THEN D=1 ELSE D=0
+    IF NOT(DIFF.ONLY) THEN
+        GOSUB PRINT.LINE
+    END ELSE
+        IF D THEN GOSUB PRINT.LINE
+    END
+NEXT I
+* We don't want to ask to compare MV when already comparing MV
+IF FILENAME[1,9]="TRIN.TEMP" THEN STOP
+LOOP
+    PRINT "Compare MV records? (Y/N=CR): ":
+    INPUT YORN
+UNTIL YORN#"Y" DO
+    GOSUB MV.COMPARE
+REPEAT
+STOP
+
+PRINT.LINE:
+    PRINT FMT(I,"R#3"):
+    IF D THEN SEP="*" ELSE SEP="|"
+    PRINT SEP:FMT(R1<I>,"L#35"):SEP:FMT(R2<I>,"L#35"):SEP
+    PRINT.CTR+=1
+    IF MOD(PRINT.CTR,20) = 0 THEN
+        PRINT "Continue: ":
+        INPUT CONT
+        IF CONT = "N" OR CONT = "/" THEN STOP
+    END
+RETURN
+
+MV.COMPARE:
+    PRINT "Which ATB#? ":
+    INPUT ATB
+    * Write the two records out to a temp file and diff that ;-)
+    CALL TRIN.TEMP.OPEN(TRIN.F, "")
+    R1=R1<ATB>
+    R2=R2<ATB>
+    CONVERT @VM TO @AM IN R1
+    CONVERT @VM TO @AM IN R2
+    WRITE R1 ON TRIN.F, ITEM1
+    WRITE R2 ON TRIN.F, ITEM2
+    E=\TRIN.DIFF TRIN.TEMP,\:@UDTNO:\ \:ITEM1:\ \:ITEM2
+    IF DIFF.ONLY THEN E:=\ /D\
+    EXECUTE E
+RETURN
