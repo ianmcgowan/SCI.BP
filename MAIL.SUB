@@ -1,0 +1,102 @@
+SUBROUTINE TRIN.MAIL.SUB(RECIP.LIST, FROM.USER, SOURCE, SUBJECT, OPTIONS)
+***************************************************************************
+* Program: TRIN.MAIL.SUB
+* Author : Ian McG
+* Date   : 01/22/1998
+* Edited : $Id: TRIN.MAIL.SUB 17345 2014-09-08 16:49:00Z mcgowi96 $
+* Comment: General subroutine to mail message
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- ---------------------------------------------------------
+* 08/10/1999 IAN  Modified to use sendmail, correct from address
+* 10/20/1999 MGC  MODIFIED TO CHECK FOR VALID EMAIL IN ALIAS FILE
+* 12/09/1999 IAN  Modified check to use TRIN.MAIL.ALIAS
+* 01/28/2003 IAN  Use matt, instead of uuenview
+* 01/30/2003 IAN  Loop over comma seperated address list
+* 09/30/2008 IAN  Send as confidential/encrypted in certain accounts
+* 10/31/2008 IAN  Fix bad use of temp files
+* 12/09/2014 IAN  Remove temp files when done, dummy!
+* 12/31/2014 IAN  Use a temp dir, to make cleanup easier
+
+* RECIP.LIST           Comma seperated list of recipients
+* FROM.USER            Who is the mail from?  "" = current user
+* SOURCE               The text of the message to send, or path to the file
+* SUBJECT              What to put on the subject line
+* OPTIONS<1>='PATH'    Source is the path to the file to send
+* OPTIONS<2>='UU'      Send the file uuencoded, as an attachment
+
+RECIP.LIST=DOWNCASE(RECIP.LIST)
+CONVERT "," TO @AM IN RECIP.LIST
+
+OPEN 'TRIN.GLOBAL.PARAMETER' TO TRIN.GLOBAL.PARAMETER THEN
+    READ ACCOUNT.REC FROM TRIN.GLOBAL.PARAMETER, 'ACTIVE.ACCOUNTS' THEN
+        LOCATE @ACCOUNT IN ACCOUNT.REC<2> SETTING POS THEN
+            CONFIDENTIAL.FLAG=ACCOUNT.REC<3,POS>
+            IF CONFIDENTIAL.FLAG="Confidential" THEN
+                SUBJECT="Confidential: ":SUBJECT
+            END
+        END
+    END
+END
+
+EXECUTE "!mktemp -d -t trinmail.XXXXXXXXXX" CAPTURING TEMPDIR
+TEMPDIR=TEMPDIR<1>
+TEMP1=TEMPDIR:"/temp1.txt"
+TEMP2=TEMPDIR:"/temp2.txt"
+TEMP3=TEMPDIR:"/temp3.txt"
+
+IF OPTIONS<1>='PATH' THEN
+    * Indirect mail - source is the path of the file to send
+    LOCATION=SOURCE
+END ELSE
+    * Direct mail - source is the actual record to be sent
+    SWAP @VM WITH @AM IN SOURCE
+    SWAP @AM WITH CHAR(10) IN SOURCE
+    SOURCE:=CHAR(10)
+    LOCATION=TEMP1
+    OSWRITE SOURCE ON LOCATION
+END
+
+IF FROM.USER = '' THEN FROM.USER=@LOGNAME
+IF INDEX(FROM.USER,'@',1) = 0 THEN
+    CALL TRIN.MAIL.ALIAS(FROM.USER, ALIAS)
+    IF TRIM(ALIAS) # '' THEN FROM.USER=ALIAS
+END
+
+RECIP.NUM=DCOUNT(RECIP.LIST,@AM)
+FOR RECIP.CTR=1 TO RECIP.NUM
+    RECIP=RECIP.LIST<RECIP.CTR>
+    IF INDEX(RECIP,"@",1)=0 THEN
+        * If there's no @ sign, must be a local address, look up in aliases
+        CALL TRIN.MAIL.ALIAS(RECIP, ALIAS)
+        IF ALIAS#'' THEN RECIP=ALIAS
+    END
+    GOSUB MAIL.ONE.RECIP
+NEXT RECIP.CTR
+* Clean up temp files
+E=\!rm -rf \:TEMPDIR
+EXECUTE E
+RETURN
+STOP
+
+MAIL.ONE.RECIP:
+    IF OPTIONS<2>='UU' THEN
+        * This will present the file as a uuencoded attachment
+        E=\!uuenview -b -f "\:FROM.USER:\" -m "\:RECIP:\"\
+        E:=\ -s "\:SUBJECT:\" \:LOCATION
+        PRINT E
+        EXECUTE E
+    END ELSE
+        * This will just put the file into the message body
+        HEAD.REC    = "To: ":RECIP
+        HEAD.REC<-1>= "From: ":FROM.USER
+        HEAD.REC<-1>= "Subject: ":SUBJECT
+        HEAD.REC:=CHAR(10):CHAR(10)
+        SWAP @AM WITH CHAR(10) IN HEAD.REC
+        OSWRITE HEAD.REC ON TEMP2
+        EXECUTE "!cat ":TEMP2:" ":LOCATION:" > ":TEMP3
+        E="!sendmail ":RECIP:" < ":TEMP3
+        PRINT E
+        EXECUTE E
+    END
+RETURN
