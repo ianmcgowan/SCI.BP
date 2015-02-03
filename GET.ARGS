@@ -1,0 +1,43 @@
+SUBROUTINE TRIN.GET.ARGS(SENTENCE, ARGS, PARAMS, OPTIONS)
+***************************************************************************
+* Program: TRIN.GET.ARGS
+* Author : Ian McG
+* Date   : 02/25/2000
+* Edited : 16:02:47 Aug 20 2002 By MCGOWAN
+* Comment: Standard parsing of command arguments
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- -----------------------------------------------------
+* 08/20/2002 IAN  ARGS should stay in the same order as they are passed
+
+* Sample SENTENCE: STREAM DAILY /D=2/14/2000 -DEBUG WEEKLY
+*
+* DAILY and WEEKLY are arguments to the STREAM command
+* whereas /D and -DEBUG are params
+
+ARGS='' ; PARAMS=''
+I=DCOUNT(SENTENCE, ' ')
+FOR W=2 TO I
+   WORD=FIELD(SENTENCE,' ',W)
+   C1=WORD[1,1]
+   PFLAG=0
+   IF C1 = '/' OR C1 = '-' THEN WORD=WORD[2,99] ; PFLAG=1
+   ARG=FIELD(WORD, '=', 1)
+   VAL=FIELD(WORD, '=', 2)
+   IF PFLAG THEN
+      LOCATE ARG IN PARAMS<1> BY 'AR' SETTING POS THEN
+         PRINT ARG:' found more than once'
+      END ELSE
+         INS ARG BEFORE PARAMS<1,POS>
+         INS VAL BEFORE PARAMS<2,POS>
+      END
+   END ELSE
+      LOCATE ARG IN ARGS<1> SETTING POS THEN
+         PRINT ARG:' found more than once'
+      END ELSE
+         INS ARG BEFORE ARGS<1,-1>
+         INS VAL BEFORE ARGS<2,-1>
+      END
+   END
+NEXT W
+RETURN
