@@ -1,72 +1,44 @@
 SUBROUTINE LOTUS(LIST,DESC,REPLY)
-*SPLC**********************************************************************
-*                                                                         *
-*   Program Title    : LOTUS MENU SUBROUTINE                              *
-*   Author           : Ian McGowan                                        *
-*   Date Started     : 6/16/89                                            *
-*   Last Modified    : 13:05:34  12 DEC 1990 By 3                         *
-*   Description      : Subroutine to provide Lotus-like menus.            *
-*                    :                                                    *
-*                    :                                                    *
-*   Comments         : Be careful about changing REPLY in the calling     *
-*                    : program                                            *
-*   Usage            : Call as : CALL LOTUS(list,desc,reply)              *
-*                                                                         *
 ***************************************************************************
-* list consists of the characters that will trigger a certain response
-* desc is a description of each option
-* reply is the option chosen - this must be initialised in the calling
-* program
-PROMPT '' ; VM = CHAR(253) ; BINV = @(-13) ; EINV = @(-14)
-LEFT.ARROW = SEQ(@(-57))
-RIGHT.ARROW = SEQ(@(-60))
-UP.ARROW = SEQ(@(-58))
-DOWN.ARROW = SEQ(@(-59))
-CUR.OFF = "" ; CUR.ON = ""
-IF SYSTEM(7) = "wyse50" THEN
-   CUR.OFF = CHAR(27):"`0" ; CUR.ON  = CHAR(27):"`1"
-END
+* Program: LOTUS
+* Author : Ian McGowan
+* Date   : 6/16/89
+* Edited : 14:12:17 Jan 02 1998 By MCGOWAN
+* Comment: Be careful about changing REPLY in the calling program
+***************************************************************************
+PROMPT '' ; VM = CHAR(253)
+BINV = @(-13) ; EINV = @(-14)
+BUND = @(-15) ; EUND = @(-16)
 N = DCOUNT(LIST,VM) ; BOTTOM = @(0,23)
-PRINT BOTTOM:@(-4):
-KEY.LIST = CHAR(242):VM:CHAR(245):VM:CHAR(13):VM:LIST
 
-KEY = 1
-H = INT(INDEX(LIST,REPLY,1)/2 + 1/2)
-IF H < 1 OR H > N THEN H = 1
+LOCATE REPLY IN LIST<1> SETTING KEY ELSE KEY=1
 
-PRINT CUR.OFF: ; ECHO OFF
-LOOP WHILE KEY = 1 OR KEY = 2 DO
+ECHO OFF
+LOOP
+   GOSUB BUILD.MENU
+   CH = IN()
+   BEGIN CASE
+      CASE CH = '<' OR CH = ','
+         KEY-=1 ; IF KEY < 1 THEN KEY=N
+      CASE CH = '>' OR CH = '.' OR CH = ' '
+         KEY+=1 ; IF KEY > N THEN KEY=1
+      CASE SEQ(CH)=13
+         CH=LIST<1,KEY> ; EXIT
+      CASE 1
+         CH = UPCASE(CH)
+         LOCATE CH IN LIST<1> SETTING NKEY THEN KEY=NKEY; EXIT
+   END CASE
+REPEAT
+REPLY = LIST<1,KEY>
+ECHO ON
+RETURN
+
+BUILD.MENU:
    MENU = ''
    FOR I = 1 TO N
-      M = DESC<1,I> ; IF I = H THEN M = BINV:M:EINV
+      M = BUND:DESC<1,I>[1,1]:EUND:DESC<1,I>[2,99]
+      IF I = KEY THEN M = BINV:M:EINV
       MENU = MENU:M:'  '
    NEXT I
-   PRINT BOTTOM:MENU:
-   FOUND = 0
-   LOOP WHILE FOUND = 0 DO
-      *   INPUT CH,1:
-      CH = SEQ(IN())
-      BEGIN CASE
-         CASE CH = '<' OR CH = ',' OR CH = LEFT.ARROW
-            CH = CHAR(242)
-         CASE CH = '>' OR CH = '.' OR CH = ' ' OR CH = RIGHT.ARROW
-            CH = CHAR(245)
-         CASE CH = CHAR(243) OR CH = UP.ARROW
-            CH = 'B'
-         CASE CH = CHAR(244) OR CH = DOWN.ARROW
-            CH = 'F'
-         CASE 1
-            CH = OCONV(CHAR(CH),'MCU')
-      END CASE
-      LOCATE(CH,KEY.LIST,1;KEY) THEN FOUND = 1
-   REPEAT
-   IF KEY = 1 THEN
-      IF H GT 1 THEN H = H - 1 ELSE H = N
-   END ELSE IF KEY = 2 THEN
-      IF H LT N THEN H = H + 1 ELSE H = 1
-   END
-REPEAT
-IF KEY # 3 THEN H = KEY - 3
-REPLY = LIST<1,H>
-PRINT CUR.ON: ; ECHO ON
+   PRINT BOTTOM:@(-4):MENU:
 RETURN
