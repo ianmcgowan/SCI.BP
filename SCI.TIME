@@ -1,0 +1,13 @@
+***************************************************************************
+* Program: SCI.TIME
+* Author : Ian McGowan
+* Date   : 02/11/2015
+* Checkin: $*Id: $
+* Comment: Time how long it takes to run a command
+***************************************************************************
+S=FIELD(@SENTENCE, " ", 2, 999)
+PRINT S
+T1=TIME()
+EXECUTE S
+T2=TIME()
+PRINT T2-T1:" seconds"
