@@ -36,8 +36,12 @@ RETURN
 BUILD.MENU:
    MENU = ''
    FOR I = 1 TO N
-      M = BUND:DESC<1,I>[1,1]:EUND:DESC<1,I>[2,99]
-      IF I = KEY THEN M = BINV:M:EINV
+      PRMPT = DESC<1,I>
+	  IF I = KEY THEN
+		M = BINV:PRMPT:EINV
+	  END ELSE
+		M = BUND:PRMPT[1,1]:EUND:PRMPT[2,99]
+      END
       MENU = MENU:M:'  '
    NEXT I
    PRINT BOTTOM:@(-4):MENU:
