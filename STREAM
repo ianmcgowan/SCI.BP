@@ -1,0 +1,250 @@
+***************************************************************************
+* Program: STREAM
+* Author : Ian McG
+* Date   : 02/24/2000
+* Edited : 21:36:27 Feb 20 2015
+* Comment: Run a stream of reports, or programs
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- ---------------------------------------------------------
+* 03/06/2000 Ian  Added option to delete empty stream, list option
+* 08/09/2000 Ian  Add account name in debug subject
+* 08/28/2000 Ian  Add "DATA" option to stack input
+* 08/31/2000 Ian  Add "CAPTURE" option to group reports
+* 09/20/2000 Ian  Add "LOG" option to capture output
+* 07/24/2002 Ian  Add setup routine if in new account
+* 02/20/2015 Ian  Add more fine-grained logging
+
+OPTIONS=''
+CALL TRIN.GET.ARGS(@SENTENCE, ARGS, PARAMS, OPTIONS)
+
+OPEN 'TRIN.STREAM' TO TRIN.STREAM ELSE
+	GOSUB SETUP
+	OPEN 'TRIN.STREAM' TO TRIN.STREAM ELSE STOP 'SETUP FAILED'
+END
+OPEN 'TRIN.STREAM.LOG' TO TRIN.STREAM.LOG ELSE STOP 201,'TRIN.STREAM.LOG'
+OPEN 'TRIN.STREAM.AUDIT' TO TRIN.STREAM.AUDIT ELSE
+    EXECUTE \CREATE.FILE TRIN.STREAM.AUDIT 227,1\
+    OPEN 'TRIN.STREAM.AUDIT' TO TRIN.STREAM.AUDIT ELSE STOP 201,'TRIN.STREAM.AUDIT'
+END
+*
+CALL TRIN.GET.ACCOUNT(ACCOUNT)
+SYS.DATE=OCONV(DATE(),"D4/")
+CAPTURE.FILE='' ; LOG.FILE=''
+
+LOCATE 'H' IN PARAMS<1> SETTING POS THEN GOTO HELP
+LOCATE 'L' IN PARAMS<1> SETTING POS THEN GOTO LIST.STREAMS
+LOCATE 'E' IN PARAMS<1> SETTING POS THEN GOTO EDIT.STREAM
+LOCATE 'D' IN PARAMS<1> SETTING POS THEN
+   SYS.DATE=OCONV(ICONV(PARAMS<2,POS>,'D'),'D4/')
+   IF SYS.DATE = '' THEN STOP 'INVALID DATE - ':PARAMS<2,POS>
+END
+IF ARGS # '' THEN
+   NUM.STREAM=DCOUNT(ARGS<1>,@VM)
+   FOR STREAM.CTR=1 TO NUM.STREAM
+      STREAM=ARGS<1,STREAM.CTR>
+      GOSUB RUN.STREAM
+   NEXT STREAM.CTR
+END ELSE 
+  GOTO HELP
+END
+STOP
+
+RUN.STREAM:
+   DEBUG.FLAG=0
+   READ S FROM TRIN.STREAM, STREAM ELSE PRINT 'CANNOT READ TRIN.STREAM ':STREAM ; RETURN
+   AUDIT.REC=TIME()
+   L.CTR=DCOUNT(S,@AM)
+   FOR L=1 TO L.CTR
+      HOLD.FLAG=0
+      LINE=S<L>
+      IF LINE[1,1]='*' OR LINE[1,1]='#' THEN LINE=''
+      BEGIN CASE
+         CASE TRIM(LINE) = ''
+            NULL
+         CASE LINE[1,1] = '@'
+            GOSUB PARSE.COMMAND
+         CASE 1
+            GOSUB EXEC.COMM
+      END CASE
+   NEXT L      
+   IF DEBUG.FLAG THEN
+      PRINT "mailing ":COMO.FILE:" to ":WHOTO
+      EXECUTE \COMO OFF\
+      COMO.FILE="./_PH_/O_":COMO.FILE
+      SUBJ="Stream: ":@ACCOUNT:" ":STREAM
+      FROM.USER=@LOGNAME
+      CALL TRIN.MAIL.SUB(WHOTO, FROM.USER, COMO.FILE, SUBJ, "PATH")
+   END
+   AUDIT.REC<2>=TIME()
+   WRITE AUDIT.REC ON TRIN.STREAM.AUDIT, STREAM:"*":DATE():"*":TIME()
+RETURN
+
+PARSE.COMMAND:
+   GOSUB PARSE.VAR
+   W1=UPCASE(FIELD(LINE, ' ',1)[2,99])
+   W2=UPCASE(FIELD(LINE, ' ',2))
+   BEGIN CASE
+      CASE W1='ECHO'
+         * Send something to the screen or COMO file
+         PRINT LINE[7,999]
+      CASE W1='DEBUG'
+         * Turn on named COMO file, email it to the user when done
+         DEBUG.FLAG=1
+         WHOTO=FIELD(LINE,' ', 2,99)
+         IF WHOTO='' THEN WHOTO=@LOGNAME
+         COMO.FILE=@LOGNAME:"_":@USERNO
+         EXECUTE \COMO ON \:COMO.FILE
+      CASE W1='DATA'
+         * Stack some input for use in the next command
+         WORD.COUNT=DCOUNT(LINE, ' ')
+         FOR WORD.CTR=2 TO WORD.COUNT
+            WORD=FIELD(LINE, ' ', WORD.CTR)
+            IF WORD='CR' THEN WORD=''
+            DATA WORD
+         NEXT WORD.CTR
+      CASE W1='CAPTURE'
+         IF W2='OFF' THEN
+            EXECUTE \SP.CLOSE\
+         END ELSE
+            CAPTURE.FILE=W2
+            EXECUTE \TRIN.SP.ASSIGN \:CAPTURE.FILE
+         END
+      CASE W1='MAIL'
+         OPTIONS=''
+         CALL TRIN.CONVERT.HOLD("HOLD",CAPTURE.FILE, OPTIONS)
+         EMAIL=W2
+         SOURCE="./_HOLD_/":CAPTURE.FILE
+         SUBJECT="Queue: ":CAPTURE.FILE
+         FROM.USER='dsiroot@bankofthewest.com'
+         OPTIONS='PATH'
+         OPTIONS<2>='UU'
+         CALL TRIN.MAIL.SUB(EMAIL, FROM.USER, SOURCE, SUBJECT, OPTIONS)
+         *EXECUTE \!rm ./_HOLD_/\:CAPTURE.FILE
+      CASE W1='LOG'
+         IF W2='OFF' THEN LOG.FILE='' ELSE LOG.FILE=W2
+      CASE 1
+         PRINT 'Unknown: ':LINE
+   END CASE
+RETURN
+
+EXEC.COMM:
+   * Actually run a command
+   GOSUB PARSE.VAR
+   D=TIMEDATE():\ "\:LINE:\"\
+   PRINT STR("-", LEN(D))
+   PRINT D
+   PRINT STR("-", LEN(D))
+   AUDIT.REC<3,-1>=LINE
+   STIME=TIME()
+   AUDIT.REC<4,-1>=STIME
+   IF LOG.FILE # '' THEN
+      EXECUTE LINE CAPTURING OUTPUT
+      * Log the output from the command
+      IF OUTPUT # "" THEN
+         NEWOUTPUT=LINE:@AM:OUTPUT
+         WRITE NEWOUTPUT ON TRIN.STREAM.LOG, LOG.FILE:"*":DATE():"*":TIME()
+      END
+   END ELSE
+      * Don't capture the output
+      EXECUTE LINE
+      OUTPUT=''
+   END
+   ETIME=TIME()
+   AUDIT.REC<5,-1>=ETIME
+   * Don't strictly need this, but makes it easier when browsing
+   AUDIT.REC<6,-1>=ETIME-STIME
+   
+   I=INDEX(OUTPUT,'_HOLD_/',1)
+   IF I # 0 THEN
+      HOLD.FILE=OUTPUT[I+7,6]
+      PRINT 'HOLD FILE=':HOLD.FILE
+      IF CAPTURE.FILE='' THEN CAPTURE.FILE=FIELD(LINE,' ',1)
+      E="!cat ./_HOLD_/":HOLD.FILE:" >> ./_HOLD_/":CAPTURE.FILE
+      EXECUTE E
+      E="!rm ./_HOLD_/":HOLD.FILE
+      EXECUTE E
+   END
+RETURN
+
+PARSE.VAR:
+   * The command may contain embedded parameters or variables
+   ICTR=1
+   LOOP
+      I=INDEX(LINE, '@', ICTR)
+   UNTIL I = 0 DO
+      PAR=FIELD(FIELD(LINE, '@', ICTR+1), ' ', 1)
+      BEGIN CASE
+         CASE PAR='DATE'
+            V=SYS.DATE
+         CASE PAR='TIME'
+            V=OCONV(TIME(),'MTS')
+         CASE PAR='USER'
+            V=@LOGNAME
+         CASE PAR='HOLD'
+            V=''
+            HOLD.FLAG=1
+            ICTR+=1
+         CASE 1
+            V=''
+            ICTR+=1
+      END CASE
+      IF V # '' THEN SWAP '@':PAR WITH V IN LINE
+   REPEAT
+RETURN
+
+EDIT.STREAM:
+   * Edit a stream using joe
+   STREAM=TRIM(PARAMS<2,POS>)
+   IF STREAM # '' THEN
+      EXECUTE "SCRED TRIN.STREAM ":STREAM
+      READ S FROM TRIN.STREAM, STREAM ELSE S=''
+      EMPTY=1
+      I=DCOUNT(S,@AM)
+      FOR F=1 TO I
+         IF TRIM(S<F>) # '' THEN EMPTY=0 ; EXIT
+      NEXT F
+      IF EMPTY THEN
+         PRINT 'Delete empty stream? (Y/N) ':
+         INPUT YORN
+         IF YORN='Y' THEN
+            DELETE TRIN.STREAM, STREAM ; PRINT STREAM:' deleted'
+         END
+      END
+   END
+STOP
+
+HELP:
+   PRINT 'Usage: STREAM {stream-name} {params} '
+   PRINT '              /D=date     Use date in streams'
+   PRINT '              /E=stream   Edit stream'
+   PRINT '              /H          Help'
+   PRINT '              /L          List Streams'
+STOP
+
+LIST.STREAMS:
+   EXECUTE \SORT TRIN.STREAM\
+STOP
+
+SETUP:
+    PRINT 'It appears that this account is not setup for STREAM'
+    PRINT 'Would you like to set it up now':
+	INPUT YORN
+	IF YORN # 'Y' THEN STOP
+
+	* Create files needed
+	EXECUTE \CREATE.FILE DIR TRIN.STREAM\
+	EXECUTE \CREATE.FILE DIR TRIN.STREAM.LOG\
+    EXECUTE \CREATE.FILE TRIN.STREAM.AUDIT 227,1\
+
+	* Add an entry to the script called by dsiroot's cron
+	E= \!echo "sleep 600" >> /usr/local/bin/stream_all\
+	PRINT E
+	EXECUTE E
+
+	E=\!echo "/usr/local/bin/phantom \
+	E:=@ACCOUNT
+	E:=' STREAM \$stream &" >> /usr/local/bin/stream_all'
+	PRINT E
+	EXECUTE E
+RETURN
