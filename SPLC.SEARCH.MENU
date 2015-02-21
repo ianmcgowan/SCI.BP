@@ -16,21 +16,20 @@ SUBROUTINE SPLC.SEARCH.MENU(MENU,STR,MENU.F,PATH)
 **** Modified by JIM at 11:00:49  14 JAN 1991
 * -- Added code to build a path description - how to get to
 * -- the menu found.
-VM = CHAR(253)
 READ R FROM MENU.F, MENU THEN
    TITLES = OCONVS(R<2>,"MCU") ; PROGS  = OCONVS(R<3>,"MCU") ; FLAGS  = R<4>
-   I = DCOUNT(PROGS,VM)
+   I = DCOUNT(PROGS,@VM)
    FOR F = 1 TO I
       IF FLAGS<1,F> # 'M' THEN
          IF INDEX(PROGS<1,F>,STR,1) # 0 OR INDEX(TITLES<1,F>,STR,1) # 0 THEN
             PRINT MENU"L#4":" ":TITLES<1,F>"L#27":"  ":PROGS<1,F>"L#30":"  ":
-            K = DCOUNT(PATH,VM) ; FOR J = 2 TO K ; PRINT PATH<1,J>:',': ; NEXT J ; PRINT F
+            K = DCOUNT(PATH,@VM) ; FOR J = 2 TO K ; PRINT PATH<1,J>:',': ; NEXT J ; PRINT F
          END
       END ELSE
          MENU = PROGS<1,F>
-         PATH = PATH:VM:F
+         PATH = PATH:@VM:F
          CALL SPLC.SEARCH.MENU(MENU,STR,MENU.F,PATH)
-         K = DCOUNT(PATH,VM) ; PATH=DELETE(PATH,1,K)
+         K = DCOUNT(PATH,@VM) ; PATH=DELETE(PATH,1,K)
       END
    NEXT F
 END
