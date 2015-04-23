@@ -1,0 +1,51 @@
+SUBROUTINE CVS.STATUS(RTN,FILE,ITEM,OPTIONS)
+***************************************************************************
+* Program: CVS.STATUS
+* Author : Ian McGowan
+* Date   : 11/08/2002
+* Edited : $Log: $
+* Comment: Get the status of the program compared to svn repo
+***************************************************************************
+* $Id: CVS.STATUS 17462 2015-03-17 21:42:42Z mcgowi96 $
+DEBUG = 0
+CALL CVS.GETDIR(DIR,FILE)
+IF DIR='ZZZ' THEN RTN='NOSTATUS';RETURN
+* Check to make sure there's a file there
+E=\!if [ -f \:DIR:'/':ITEM:\ ]; then echo 1; else echo 0; fi\
+EXECUTE E CAPTURING FLAG
+FLAG=FLAG<1>
+IF FLAG#1 THEN RTN='NOSTATUS';RETURN
+
+E=\!cd \:DIR:\;\
+E:=\svn status -uv \:ITEM
+IF DEBUG THEN PRINT E
+EXECUTE E CAPTURING OUTPUT
+* http://svnbook.red-bean.com/en/1.7/svn.ref.svn.c.status.html
+* for a description of codes specific to version 1.7
+FLAGS=OUTPUT[1,9]
+STATUS=FLAGS[1,1]
+UPTODATE=FLAGS[9,1]
+CONVERT " " TO "-" IN FLAGS
+IF DEBUG THEN
+  FOR F=1 TO 10
+    PRINT F, OUTPUT[F,1]
+  NEXT F
+  PRINT "(CVS.STATUS) OUTPUT  =":OUTPUT
+  PRINT "(CVS.STATUS) STATUS  =":STATUS
+  PRINT "(CVS.STATUS) UPTODATE=":UPTODATE
+  PRINT "(CVS.STATUS) FLAGS   =":FLAGS
+END  
+
+BEGIN CASE
+   CASE STATUS="?"
+      RTN='NOTINCVS'
+   CASE STATUS=" " AND UPTODATE = " "
+      RTN='UPTODATE'
+   CASE STATUS # " " OR UPTODATE = "*"
+      RTN='MODIFIED'
+   CASE 1
+      RTN='NOTINCVS'
+END CASE
+RTN<2>=FLAGS
+IF DEBUG THEN PRINT "(CVS.STATUS) RTN=":RTN
+RETURN
