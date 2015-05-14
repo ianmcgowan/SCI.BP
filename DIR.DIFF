@@ -1,0 +1,64 @@
+***************************************************************************
+* Program: DIR.DIFF
+* Author : Ian McGowan
+* Date   : 05/13/2015
+* Checkin: $*Id: $
+* Comment: Compare to files and find different records (hint QPTR)
+***************************************************************************
+* $*Log: $
+PROMPT ""
+ARGS="";PARAMS="";OPTIONS=""
+CALL TRIN.GET.ARGS(@SENTENCE, ARGS, PARAMS, OPTIONS)
+
+FILENAME1=ARGS<1,1>
+IF FILENAME1[1,5]='DICT-' THEN FILENAME1='DICT ':FIELD(ARGS<1,1>,'-',2)
+FILENAME2=ARGS<1,2>
+IF FILENAME2[1,5]='DICT-' THEN FILENAME2='DICT ':FIELD(ARGS<1,2>,'-',2)
+
+IF FILENAME2="" THEN STOP "Usage: TRIN.DIR.DIFF {DICT-}FILENAME1 {DICT-}FILENAME2"
+
+OPEN FILENAME1 TO F1 ELSE STOP 401, FILENAME1
+OPEN FILENAME2 TO F2 ELSE STOP 401, FILENAME2
+
+F1.KEYS=''
+PASS=1
+SELECT F1
+LOOP
+    READNEXT ID ELSE EXIT
+    F1.KEYS<-1>=ID
+    GOSUB COMPARE
+REPEAT
+
+SELECT F2
+PASS=2
+LOOP
+    READNEXT ID ELSE EXIT
+    LOCATE ID IN F1.KEYS SETTING POS ELSE
+        GOSUB COMPARE
+    END
+REPEAT
+STOP
+
+COMPARE:
+    IF PASS=1 THEN
+        READ R1 FROM F1, ID THEN
+            READ R2 FROM F2, ID THEN
+                IF R1#R2 THEN MSG='MISMATCH' ; GOSUB PRINT.MSG
+            END ELSE
+                MSG='MISSING RECORD FROM ':FILENAME2 ; GOSUB PRINT.MSG
+            END
+        END
+    END ELSE
+        READ R2 FROM F2, ID THEN
+            READ R1 FROM F1, ID THEN
+                IF R1#R2 THEN MSG='MISMATCH' ; GOSUB PRINT.MSG
+            END ELSE
+                MSG='MISSING RECORD FROM ':FILENAME1 ; GOSUB PRINT.MSG
+            END
+        END
+    END
+RETURN
+
+PRINT.MSG:
+    PRINT ID, MSG
+RETURN
