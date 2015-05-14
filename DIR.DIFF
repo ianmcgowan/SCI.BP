@@ -3,7 +3,7 @@
 * Author : Ian McGowan
 * Date   : 05/13/2015
 * Checkin: $*Id: $
-* Comment: Compare to files and find different records (hint QPTR)
+* Comment: Compare two files and find different records (hint QPTR)
 ***************************************************************************
 * $*Log: $
 PROMPT ""
