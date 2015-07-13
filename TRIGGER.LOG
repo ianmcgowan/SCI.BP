@@ -1,19 +1,40 @@
-SUBROUTINE TRIN.TRIGGER.LOG(EXEC.STAT, DICT.FLAG, FILENAME, ID)
+SUBROUTINE TRIN.TRIGGER.LOG(EXEC.STAT, DICT.FLAG, FILENAME, ID, NEW.REC)
 ***************************************************************************
 * Program: TRIN.TRIGGER.LOG
 * Author : Ian McGowan
-* Date   : 2015-07-09
-* Checkin: $Id: $
-* Comment: A trigger subroutine to log deletes to the file, NOT FOR PROD!
+* Date   : 2015-07-08
+* Checkin: $*Id: $
+* Comment: A trigger subroutine to log changes to the file, NOT FOR PROD!
 ***************************************************************************
-* $Log: $
-EXEC.STAT=1 ;* 0=Not allowed, 1=allowed
+* $*Log: $
+EXEC.STAT=1 ;* 0=Not allowed, 1=allowed, 2=modified the rec
 IF FILENAME='TRIN.TRIGGER.LOGFILE' THEN RETURN ;* Don't want recursive triggers
 OPEN 'TRIN.TRIGGER.LOGFILE' TO LOG ELSE RETURN
-SAFE.ID=ID
-CONVERT '*' TO '_' IN SAFE.ID ;* A * in the ID messes things up
-* Deleting a record, don't log all fields (for now)
-LOG.REC=@AM:'DELETE'
-LOG.ID=FILENAME:"*":ID:"*":0:"*":DATE():"*":SYSTEM(12):"*":@LOGNAME
-WRITE LOG.REC ON LOG, LOG.ID
+OPEN FILENAME TO FVAR THEN
+    * In UD8, we don't need this read - OLD.REC is a param in AFTER UPDATE
+    SAFE.ID=ID
+    CONVERT '*' TO '_' IN SAFE.ID ;* A * in the ID messes things up
+    READ OLD.REC FROM FVAR, ID THEN
+        IF OLD.REC # NEW.REC THEN
+            M1=DCOUNT(OLD.REC,@AM)
+            M2=DCOUNT(NEW.REC,@AM)
+            IF M1>M2 THEN MAX=M1 ELSE MAX=M2
+            FOR F=1 TO MAX
+                IF OLD.REC<F> # NEW.REC<F> THEN
+                    LOG.REC=OLD.REC<F>:@AM:NEW.REC<F>
+                    * We use SYSTEM(12) rather than TIME(), since there usually are multiple
+                    * updates per second and we want to know the order
+                    LOG.ID=FILENAME:"*":SAFE.ID:"*":F:"*":DATE():"*":SYSTEM(12):"*":@LOGNAME
+                    * It's possible to "lose" writes > 1 per second, but OK
+                    WRITE LOG.REC ON LOG, LOG.ID
+                END
+            NEXT F
+        END
+    END ELSE
+        * Inserting a new record, don't log all fields (for now)
+        LOG.REC=@AM:'INSERT'
+        LOG.ID=FILENAME:"*":SAFE.ID:"*":0:"*":DATE():"*":SYSTEM(12):"*":@LOGNAME
+        WRITE LOG.REC ON LOG, LOG.ID
+    END
+END
 RETURN
