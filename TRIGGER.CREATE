@@ -1,0 +1,29 @@
+
+***************************************************************************
+* Program: TRIN.TRIGGER.CREATE
+* Author : Ian McGowan
+* Date   : 2015-07-09
+* Checkin: $*Id: $
+* Comment: Create update and delete triggers on all Infolease tables
+***************************************************************************
+* $*Log: $
+* It's a good idea to clear this file regularly, so it can be small..
+OPEN 'TRIN.TRIGGER.LOGFILE' TO F ELSE
+    EXECUTE \CREATE TRIN.TRIGGER.LOGFILE 237,1\
+END
+OPEN 'DATABASE.FILES,IL' TO IL ELSE STOP 201,'DATABASE.FILES,IL'
+* We need to add some exclusions to this list, for files that get updated
+* too much, where the trigger is annoying...
+SELECT IL
+LOOP
+    READNEXT ID ELSE EXIT
+    OPEN ID TO F ELSE CONTINUE
+    E=\CREATE.TRIGGER \:ID:\ TRIN.TRIGGER.LOG UPDATE\
+    PRINT E
+    EXECUTE E
+    E=\CREATE.TRIGGER \:ID:\ TRIN.TRIGGER.LOG.DEL DELETE\
+    PRINT E
+    EXECUTE E
+REPEAT
+PRINT 'DONE'
+STOP
