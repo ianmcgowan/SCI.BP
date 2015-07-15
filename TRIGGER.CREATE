@@ -1,4 +1,3 @@
-
 ***************************************************************************
 * Program: TRIN.TRIGGER.CREATE
 * Author : Ian McGowan
@@ -7,23 +6,46 @@
 * Comment: Create update and delete triggers on all Infolease tables
 ***************************************************************************
 * $*Log: $
-* It's a good idea to clear this file regularly, so it can be small..
 OPEN 'TRIN.TRIGGER.LOGFILE' TO F ELSE
-    EXECUTE \CREATE TRIN.TRIGGER.LOGFILE 237,1\
+    EXECUTE \CREATE TRIN.TRIGGER.LOGFILE 2371,1\
 END
+OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
 OPEN 'DATABASE.FILES,IL' TO IL ELSE STOP 201,'DATABASE.FILES,IL'
 * We need to add some exclusions to this list, for files that get updated
 * too much, where the trigger is annoying...
 SELECT IL
 LOOP
     READNEXT ID ELSE EXIT
+    READ FILE.REC FROM VOC, ID ELSE CONTINUE
+    FILE.TYPE=FILE.REC<1>
+    FILE.LOC=FILE.REC<2>
+    IF FILE.LOC[1,1]='/' THEN CONTINUE
+    IF FILE.TYPE='DIR' OR FILE.TYPE='LD' THEN CONTINUE
     OPEN ID TO F ELSE CONTINUE
+    CLOSE F
+    E=\DELETE.TRIGGER \:ID:\ UPDATE\
+    PRINT E
+    EXECUTE E
     E=\CREATE.TRIGGER \:ID:\ TRIN.TRIGGER.LOG UPDATE\
+    PRINT E
+    EXECUTE E
+    E=\DELETE.TRIGGER \:ID:\ DELETE\
     PRINT E
     EXECUTE E
     E=\CREATE.TRIGGER \:ID:\ TRIN.TRIGGER.LOG.DEL DELETE\
     PRINT E
     EXECUTE E
+    * CHECK IT WORKED
+    * >LIST.TRIGGER LS.MASTER
+    *BEFORE UPDATE TRIGGER: TRIN.TRIGGER.LOG
+    *BEFORE DELETE TRIGGER: TRIN.TRIGGER.LOG.DEL
+    E=\LIST.TRIGGER \:ID
+    PRINT E
+    EXECUTE E CAPTURING OUTPUT
+    IF DCOUNT(OUTPUT,@AM) # 3 OR INDEX(OUTPUT<1>,'not defined',1) # 0 OR INDEX(OUTPUT<2>,'not defined',1) # 0 THEN
+        PRINT 'TRIGGER CREATION FAILED? PRESS ENTER:':
+        INPUT AAA
+    END
 REPEAT
 PRINT 'DONE'
 STOP
