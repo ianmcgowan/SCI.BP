@@ -1,0 +1,558 @@
+***************************************************************************
+* Program: SHOW.INV
+* Author : Ian McGowan
+* Date   : 05/12/2015
+* Checkin: $*Id: $
+* Comment: Prompt for an invoice file, show it in a readable format
+***************************************************************************
+* $*Log: $
+
+PROMPT ''
+S=@SENTENCE
+CALL SCI.GET.ARGS(S, ARGS, PARAMS, OPTIONS)
+OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
+OPEN 'PARAMETER' TO PARAMETER ELSE STOP 201,'PARAMETER'
+OPEN 'INVOICE.EXTRACTS' TO INVOICE.EXTRACTS ELSE STOP 201,'INVOICE.EXTRACTS'
+OPEN 'LS.INVOICE.FORMAT' TO LS.INVOICE.FORMAT ELSE STOP 201,'LS.INVOICE.FORMAT'
+* Change this to check MAINTAIN.UNIX.DIRECTORIES
+READV EXTRACT.PATH FROM VOC, 'INVOICE.EXTRACTS', 2 ELSE STOP 'ERROR READING VOC'
+
+EXECUTE \!hostname\ CAPTURING HOSTNAME
+HOSTNAME=HOSTNAME<1>
+CALL SCI.GET.ACCOUNT(ACCT)
+* Figure out the zip filename early, so we can include it in the audit record
+IF HOSTNAME[1,2]#'xp' THEN TAG='_MDLTEST_' ELSE TAG='_MDL_'
+ZIP.FILE=ACCT:TAG:OCONV(DATE(),'D-YMD[2,2,2]'):OCONV(TIME(),'MT'):'.zip'
+CONVERT '-' TO '' IN ZIP.FILE
+CONVERT ':' TO '' IN ZIP.FILE
+
+SUM.REC=''
+PROCESS.JOB.REC=''
+ERROR=0
+AUTO=0
+PRINT @(-1):'SHOW.INV'
+PRINT
+EXECUTE '!ls -lt ':EXTRACT.PATH:' | grep DAT | head -30'
+PRINT
+
+LOCATE 'A' IN PARAMS<1> SETTING POS THEN
+    PRINT 'Are you ready to send *ALL* these invoice files to OSG? (Y/N=CR): ':
+    INPUT YORN
+    IF YORN # 'Y' THEN STOP
+    AUTO=1
+    FILE.LIST=''
+    * We are going to process everything in EXTRACT.PATH
+    OUTPUT.OPT='S'
+    BRK='N'
+    E=\SSELECT INVOICE.EXTRACTS = "[.DAT"\
+    PRINT E
+    EXECUTE E
+    LOOP
+        READNEXT FILE ELSE EXIT
+        IF FILE[1,4]='INV.' THEN
+            OLD.FILE=FILE
+            FILE=ACCT:'.':FIELD(FILE,'.',2,3)
+            E=\!cd \:EXTRACT.PATH:\;mv \:OLD.FILE:\ \:FILE
+            PRINT E
+            EXECUTE E
+        END
+        FILE.LIST<-1>=FILE
+        GOSUB PROCESS.FILE
+    REPEAT
+END ELSE
+    FILE.LIST=''
+    GOSUB CHOOSE.FILE
+    GOSUB PROCESS.FILE
+    STOP
+END
+IF ERROR#0 THEN STOP 'NOT ARCHIVING FILES BECAUSE OF ERRORS'
+IF FILE.LIST='' THEN STOP 'NO FILES TO PROCESS, STOPPING'
+
+* Create the PROCESS.JOB file
+PROCESS.JOB.FILE=EXTRACT.PATH:'/PROCESS.JOB'
+OSDELETE PROCESS.JOB.FILE
+MSG='*PROCESS.JOB CREATED ON SERVER ':HOSTNAME:':':@ACCOUNT:' BY ':@LOGNAME:' ON ':OCONV(DATE(),'D4/'):' AT ':OCONV(TIME(),'MTS')
+INS MSG BEFORE PROCESS.JOB.REC<1>
+PROCESS.JOB.REC<-1>=''
+SWAP @AM WITH CHAR(13):CHAR(10) IN PROCESS.JOB.REC
+OSWRITE PROCESS.JOB.REC ON PROCESS.JOB.FILE
+FILE.LIST<-1>='PROCESS.JOB'
+
+* Now zip up those files and move to archive
+CONVERT @AM TO " " IN FILE.LIST
+E=\!cd \:EXTRACT.PATH:\;zip -m \:ZIP.FILE:\ \:FILE.LIST
+PRINT E
+EXECUTE E
+
+* scp to Secure Transport
+E=\!cd \:EXTRACT.PATH:\;scp \:ZIP.FILE:\ osgusername@sftp.osgbilling.com:.\
+PRINT E
+EXECUTE E
+
+* Archive it
+E=\!cd \:EXTRACT.PATH:\;mkdir -p archive;mv \:ZIP.FILE:\ archive\
+PRINT E
+EXECUTE E
+
+SUM.TXT=''
+SUM.TXT<-1>='Invoicing run on ':HOSTNAME:':':@ACCOUNT:' on ':OCONV(DATE(),'D4/'):' at ':OCONV(TIME(),'MTS'):' by ':@LOGNAME
+SUM.TXT<-1>='Zip file: ':ZIP.FILE
+SUM.TXT<-1>=''
+SUM.TXT<-1>='File' 'L#30':' ':'Amount' 'R#15':' ':'Count' 'R#8':' ':'Errors' 'R#8'
+SUM.TXT<-1>=STR('-',30):' ':STR('-',15):' ':STR('-',8):' ':STR('-',8)
+GTOT=0;GCTR=0;GERR=0
+FOR F=1 TO DCOUNT(SUM.REC<1>,@VM)
+    GTOT+=SUM.REC<2,F>
+    GCTR+=SUM.REC<3,F>
+    GERR+=SUM.REC<4,F>
+    S=SUM.REC<1,F>'L#30':' '
+    S:=OCONV(SUM.REC<2,F>,'MR2,#15'):' '
+    S:=OCONV(SUM.REC<3,F>,'MR0,#8'):' '
+    S:=OCONV(SUM.REC<4,F>,'MR0,#8')
+    SUM.TXT<-1>=S
+NEXT F
+SUM.TXT<-1>=STR('-',30):' ':STR('-',15):' ':STR('-',8):' ':STR('-',8)
+SUM.TXT<-1>=SPACE(30):' ':OCONV(GTOT,'MR2,#15'):' ':OCONV(GCTR,'MR0,#8'):' ':OCONV(GERR,'MR0,#8')
+
+FOR F=1 TO DCOUNT(SUM.TXT,@AM)
+    PRINT SUM.TXT<F>
+NEXT F
+
+RECIP.LIST=@LOGNAME
+FROM.USER=@LOGNAME
+SUBJECT='Invoice run complete ':@ACCOUNT
+OPTIONS=''
+CALL SCI.MAIL.SUB(RECIP.LIST, FROM.USER, SUM.TXT, SUBJECT, OPTIONS)
+
+PRINT 'DONE'
+STOP
+
+PROCESS.FILE:
+    INVOICE.FRMT=FIELD(FILE,'.',2)
+    * We add 1 to the length because we will be cutting |STMA or |INV at the end
+    FRMT.LEN=LEN(INVOICE.FRMT)+1
+    
+    * OK, done asking questions, but before parsing we need to fix it up so it's not
+    * one big line.  tr to the rescue! http://www.thegeekstuff.com/2012/12/linux-tr-command/
+    EXECUTE '!mktemp -t SCI.show.inv.XXXXXXXXXX' CAPTURING TEMPFILE
+    TEMPFILE=TEMPFILE<1>
+    NEWFILE=TEMPFILE:'_NEW'
+    E='!touch ':NEWFILE
+    PRINT E
+    EXECUTE E
+    E="!tr '|' '\n' < ":EXTRACT.PATH:'/':FILE:' > ':TEMPFILE
+    PRINT E
+    EXECUTE E
+    
+    * Let's make sure there's only one line in the file
+    PRINT 'Checking number of lines in file...'
+    E='!wc -l ':EXTRACT.PATH:'/':FILE
+    PRINT E
+    EXECUTE E CAPTURING WC
+    NUMLINES=FIELD(TRIM(WC<1>),' ',1)
+    IF NUMLINES=1 THEN
+        PRINT 'One - continuing!'
+    END ELSE
+        MSG='WAH! Wrong number of lines - exiting'
+        GOSUB ADD.ERR.MSG
+        RETURN
+    END
+    
+    OPENSEQ TEMPFILE TO TFILE ON ERROR STOP TEMPFILE ELSE STOP "UNABLE TO OPEN SEQ FILE:":TEMPFILE
+    OPENSEQ NEWFILE  TO NFILE ON ERROR STOP NEWFILE ELSE STOP "UNABLE TO OPEN SEQ FILE:":NEWFILE
+    
+    IF OUTPUT.OPT='D' THEN
+        EXECUTE '!mktemp -t SCI.show.inv.XXXXXXXXXX' CAPTURING TEMPOUT
+        TEMPOUT=TEMPOUT<1>
+        EXECUTE '!mv ':TEMPOUT:' ':TEMPOUT:'.txt'
+        TEMPOUT:='.txt'
+        OPENSEQ TEMPOUT TO TOUT ON ERROR STOP TEMPOUT ELSE STOP "UNABLE TO OPEN SEQ FILE2:":TEMPOUT
+    END
+    
+    FRMT=FIELD(FILE,'.',2)
+    READ INV.FORMAT FROM LS.INVOICE.FORMAT, FRMT ELSE STOP 'NOT A VALID FORMAT'
+    
+    * The internal codes for each section
+    SECTIONS='CADDR':@VM:'CNTC':@VM:'CHRG':@VM:'ASSET':@VM
+    SECTIONS:='SPLIT':@VM:'CADDR':@VM:'SCAN.LINE'
+    * A descriptive name for each section
+    SECTIONS<2>='CADDR':@VM:'CONTRACT':@VM:'CHARGE DETAIL':@VM:'ASSET':@VM
+    SECTIONS<2>:='ASSET SPLIT':@VM:'REMIT':@VM:'SCAN LINE'
+    * Which line in the layout is used for each section
+    SECTIONS<3>=28:@VM:29:@VM:30:@VM:31:@VM:32:@VM:33:@VM:54
+    * The dictionary to check for each section
+    SECTIONS<4>=1:@VM:1:@VM:2:@VM:3:@VM:3:@VM:1:@VM:1
+    
+    * Section signatures
+    SIG='INV':@VM:'INVA':@VM:'STM':@VM:'STMA':@VM:'*CBEGIN*':@VM:'*ABEGIN*'
+    SIG:=@VM:'*RBEGIN*':@VM:'*CHBEGIN*'
+    SIG<2>=1:@VM:1:@VM:1:@VM:1:@VM:2:@VM:5:@VM:6:@VM:3
+    
+    DIM FPTR(3)
+    OPEN 'DICT LS.MASTER' TO FPTR(1) ELSE STOP 'DICT LS.MASTER'
+    OPEN 'DICT LS.OI.CTD.INVOICE' TO FPTR(2) ELSE STOP 'DICT LS.OI.CTD.INVOICE'
+    OPEN 'DICT AS.MASTER' TO FPTR(3) ELSE STOP 'DICT AS.MASTER'
+    
+    * This first call is a throwaway to skip the header line
+    LINE.CTR=0
+    THIS.INV=''
+    FLD=''
+    SEC.DESC=''
+    GOSUB GET.NEXT.VALUE
+    
+    * Ok, let the madness begin
+    GOSUB GET.NEXT.VALUE
+    * Clear THIS.INV again, so we don't get the STM|STM| dealio
+    THIS.INV='' ; EXTRACTED.INVS=''
+    SECTION=1 ;* Files always start with a CADDR section
+    FILE.GRAND.TOTAL=0
+    FILE.GRAND.COUNT=0
+    FILE.ZERO.GRAND.COUNT=0
+    CONTRACT.GRAND.TOTAL=0
+    CONTRACT.GRAND.COUNT=0
+    CHARGE.GRAND.TOTAL=0
+    CHARGE.GRAND.COUNT=0
+    ERR='' ; CCAN=''
+    LOOP
+        SEC.NAME=SECTIONS<1,SECTION>
+        SEC.DESC=SECTIONS<2,SECTION>
+        SEC.PTR=SECTIONS<3,SECTION>
+        SEC.FILE=SECTIONS<4,SECTION>
+        SEC.FIELDS=INV.FORMAT<SEC.PTR>
+        
+        IF SEC.DESC='CADDR' AND FILE.GRAND.COUNT # 0 THEN
+            IF OUTPUT.OPT='B' THEN
+                PRINT 'FILE GRAND TOTAL:':OCONV(FILE.GRAND.TOTAL,'MR2,')
+                PRINT 'FILE GRAND COUNT:':FILE.GRAND.COUNT
+                PRINT 'INVOICE  NUM    :':INVOICE.NUMBER
+                PRINT 'INVOICE  TOTAL  :':OCONV(INV.TOTAL,'MR2,')
+                PRINT 'CONTRACT TOTAL  :':OCONV(CONTRACT.GRAND.TOTAL,'MR2,')
+                PRINT 'CONTRACT COUNT  :':CONTRACT.GRAND.COUNT
+                PRINT 'CHARGE   TOTAL  :':OCONV(CHARGE.GRAND.TOTAL,'MR2,')
+                PRINT 'CHARGE   COUNT  :':CHARGE.GRAND.COUNT
+            END
+            IF INV.TOTAL # CONTRACT.GRAND.TOTAL OR CONTRACT.GRAND.TOTAL # CHARGE.GRAND.TOTAL THEN
+                MSG='TOTAL ERROR: ':OCONV(INV.TOTAL,'MR2,'):'=':OCONV(CONTRACT.GRAND.TOTAL,'MR2,'):'='
+                MSG:=OCONV(CHARGE.GRAND.TOTAL,'MR2,')
+                GOSUB ADD.ERR.MSG
+            END
+            CONTRACT.GRAND.TOTAL=0
+            CONTRACT.GRAND.COUNT=0
+            CHARGE.GRAND.TOTAL=0
+            CHARGE.GRAND.COUNT=0
+            IF OUTPUT.OPT='E' THEN
+                LOCATE INVOICE.NUMBER IN EXTRACT.INV.NUMS SETTING POS THEN
+                    * Because of the processing order, we have to fix up THIS.INV
+                    THIS.INV=INVOICE.FRMT:THIS.INV
+                    THIS.INV=THIS.INV[1,LEN(THIS.INV)-FRMT.LEN]
+                    EXTRACTED.INVS:=THIS.INV:'|'
+                END
+            END
+            THIS.INV=''
+            IF BRK='I' THEN
+                PRINT 'Next Invoice:': ; INPUT A
+                IF A='/' THEN STOP
+            END
+        END
+        
+        IF SEC.FIELDS # '' THEN
+            FLD=SEC.FIELDS<1,1>
+            READV FLD.DESC FROM PARAMETER, SEC.NAME:'.DE*':FLD, 1 ELSE PRINT 'CANNOT READ PARAMETER ':SEC.NAME:'.DE*':FLD ; FLD.DESC=''
+            IF OUTPUT.OPT='B' AND BRK # 'E' THEN
+                PRINT STR('-',40)
+                PRINT 'SECTION ':SEC.DESC
+                PRINT STR('-',40)
+                PRINT LINE.CTR 'R#6':' ':1 'R#3':' ':FLD 'R#3':' ':
+                PRINT FLD.DESC'L#20':' =':VALUE
+            END
+            IF OUTPUT.OPT='D' THEN
+                L=STR('-',40)
+                GOSUB WRITE.DUMP.LINE
+                L='SECTION ':SEC.DESC
+                GOSUB WRITE.DUMP.LINE
+                L=STR('-',40)
+                GOSUB WRITE.DUMP.LINE
+                L=LINE.CTR 'R#6':' ':1 'R#3':' ':FLD 'R#3':' ':FLD.DESC'L#20':' =':VALUE
+                GOSUB WRITE.DUMP.LINE
+            END
+            FOR G=2 TO DCOUNT(SEC.FIELDS<1>,@VM)
+                * Start at 2, to skip the header of the field
+                FLD=SEC.FIELDS<1,G>
+                READV FLD.DESC FROM PARAMETER, SEC.NAME:'.DE*':FLD, 1 ELSE FLD.DESC=''
+                GOSUB GET.NEXT.VALUE
+                IF BRK='S' AND INDEX(VALUE,SRCH,1) # 0 THEN
+                    PRINT 'Srch found! - PRESS ENTER:':
+                    INPUT A
+                    IF A='/' THEN STOP
+                    BRK='T'
+                END
+                NUM.VALUE=ICONV(VALUE,'MR2,')
+                BEGIN CASE
+                    CASE FLD='117' AND SEC.DESC='CADDR'
+                        SCANLINE=VALUE
+                        IF LEN(SCANLINE) # 25 THEN
+                            MSG='INVALID SCANLINE LEN: ':LEN(SCANLINE):' FOR ':SCANLINE:'!'
+                            GOSUB ADD.ERR.MSG
+                        END
+                    CASE FLD='600' AND SEC.DESC='CADDR'
+                        CCAN=VALUE
+                    CASE FLD='002' AND SEC.DESC='CADDR'
+                        INVOICE.NUMBER=VALUE
+                    CASE (FLD='005' AND SEC.DESC='CADDR') OR (FLD='014' AND SEC.DESC='CADDR')
+                        INV.TOTAL=NUM.VALUE
+                        FILE.GRAND.TOTAL+=NUM.VALUE
+                        FILE.GRAND.COUNT+=1
+                        IF INV.TOTAL<=0 THEN
+                            FILE.ZERO.GRAND.COUNT+=1
+                            *MSG='STATEMENT WITH AMT DUE <= 0'
+                            *GOSUB ADD.ERR.MSG
+                        END
+                    CASE FLD='073' AND SEC.DESC='CONTRACT'
+                        CONTRACT.TOTAL=NUM.VALUE
+                        CONTRACT.GRAND.TOTAL+=NUM.VALUE
+                        CONTRACT.GRAND.COUNT+=1
+                    CASE (FLD='006' AND SEC.DESC='CHARGE DETAIL') OR (FLD='007' AND SEC.DESC='ASSET SPLIT')
+                        CHARGE.TOTAL=NUM.VALUE
+                        CHARGE.GRAND.TOTAL+=NUM.VALUE
+                        CHARGE.GRAND.COUNT+=1
+                        IF CHARGE.TOTAL # CHARGE.AMT + CHARGE.TAXAMT THEN
+                            MSG='CHARGE AMT + TAX # CHARGE TOTAL:':OCONV(CHARGE.AMT,'MR2,'):'+'
+                            MSG:=OCONV(CHARGE.TAXAMT,'MR2,'):'#':OCONV(CHARGE.TOTAL,'MR2,')
+                            GOSUB ADD.ERR.MSG
+                        END
+                    CASE (FLD='002' AND SEC.DESC='CHARGE DETAIL') OR (FLD='002' AND SEC.DESC='ASSET SPLIT')
+                        CHARGE.AMT=NUM.VALUE
+                    CASE (FLD='009' AND SEC.DESC='CHARGE DETAIL') OR (FLD='005' AND SEC.DESC='ASSET SPLIT')
+                        CHARGE.TAXAMT=NUM.VALUE
+                    CASE FLD='103' AND SEC.DESC='REMIT'
+                        R.CHARGES=NUM.VALUE
+                    CASE FLD='105' AND SEC.DESC='REMIT'
+                        R.TAX=NUM.VALUE
+                    CASE (FLD='014' AND SEC.DESC='REMIT') OR (FLD='005' AND SEC.DESC='REMIT')
+                        R.TOTAL=NUM.VALUE
+                        IF R.TOTAL # INV.TOTAL THEN
+                            MSG='CADDR TOTAL#REMIT TOTAL:':OCONV(INV.TOTAL,'MR2,'):'#':OCONV(R.TOTAL,'MR2,')
+                            GOSUB ADD.ERR.MSG
+                        END
+                        IF (R.CHARGES+R.TAX) # R.TOTAL THEN
+                            MSG='CHARGES+TAX # REMIT TOTAL:':OCONV(R.CHARGES,'MR2,'):'+':OCONV(R.TAX,'MR2,'):'#'
+                            MSG:=OCONV(R.TOTAL,'MR2,')
+                            GOSUB ADD.ERR.MSG
+                        END
+                END CASE
+                IF FLD.DESC # 'Delimiter' THEN
+                    L=LINE.CTR 'R#6':' ':G 'R#3':' ':FLD 'R#3':' ':FLD.DESC'L#20':' =':VALUE
+                    IF OUTPUT.OPT='B' AND BRK # 'E' THEN
+                        PRINT L
+                    END
+                    IF OUTPUT.OPT='D' THEN GOSUB WRITE.DUMP.LINE
+                END
+            NEXT G
+        END
+        
+        * 'Peek' ahead to the next section
+        LOOP
+            GOSUB GET.NEXT.VALUE
+            IF VALUE='*END*' THEN EXIT
+            IF BRK = 'T' THEN
+                PRINT LINE.CTR:' ':VALUE:' Press ENTER:':
+                INPUT A
+                IF A = '/' THEN STOP
+                IF A # '' THEN BRK=A
+            END
+            LOCATE VALUE IN SIG<1> SETTING POS THEN
+                SECTION=SIG<2,POS>
+                EXIT
+            END ELSE
+                MSG='FORMAT ERROR-NEXT SECTION HEADER MISSING'
+                GOSUB ADD.ERR.MSG
+            END
+        REPEAT
+        IF VALUE='*END*' THEN EXIT
+    REPEAT
+    
+    CLOSESEQ TFILE
+    CLOSESEQ NFILE
+    
+    IF OUTPUT.OPT='E' THEN
+        * Remove the final |
+        EXTRACTED.INVS=EXTRACTED.INVS[1,LEN(EXTRACTED.INVS)-1]
+        * Add the file header
+        EXTRACTED.INVS='^job ':INVOICE.FRMT:' -rtrunc -apfon':CHAR(10):EXTRACTED.INVS
+        PRINT EXTRACTED.INVS
+        EXTRACT.FILE=EXTRACT.PATH:'/INV.':INVOICE.FRMT:'.EXTRACT.DAT'
+        OSDELETE EXTRACT.FILE
+        OSWRITE EXTRACTED.INVS ON EXTRACT.FILE
+    END
+    
+    IF ERR = '' THEN
+        PRINT FILE:'-NO ERRORS'
+    END ELSE
+        PRINT FILE:' ERRORS'
+        GOSUB SEND.ERRORS
+    END
+    PRINT 'FILE GRAND TOTAL:':OCONV(FILE.GRAND.TOTAL,'MR2,')
+    PRINT 'FILE GRAND COUNT:':FILE.GRAND.COUNT
+    PRINT 'FILE ZERO  COUNT:':FILE.ZERO.GRAND.COUNT
+    PRINT 'FILE ERROR COUNT:':DCOUNT(ERR<1>,@AM)
+    
+    IF HOSTNAME[1,2]='xp' THEN
+        PROCESS.JOB.OPTS='FILE=':FILE:' PROC=USSFCMLPDF STMTS=':FILE.GRAND.COUNT
+    END ELSE
+        PROCESS.JOB.OPTS='FILE=':FILE:' PROC=MAIL2 STMTS=':FILE.GRAND.COUNT:' MODE=Test'
+    END
+    PROCESS.JOB.REC<-1>=PROCESS.JOB.OPTS
+    
+    IF AUTO THEN
+        E=\!mv \:NEWFILE:\ \:EXTRACT.PATH:'/':FILE
+        PRINT E
+        EXECUTE E
+        
+        AUDIT.REC=''
+        AUDIT.REC<1>=DATE()
+        AUDIT.REC<2>=TIME()
+        AUDIT.REC<3>=@LOGNAME
+        AUDIT.REC<4>=@ACCOUNT
+        AUDIT.REC<5>=FILE.GRAND.TOTAL
+        AUDIT.REC<6>=FILE.GRAND.COUNT
+        AUDIT.REC<7>=DCOUNT(ERR<1>,@VM)
+        AUDIT.REC<8>=ERR<1>
+        AUDIT.REC<9>=ERR<2>
+        AUDIT.REC<10>=ERR<3>
+        AUDIT.REC<11>=ERR<4>
+        AUDIT.REC<12>=ZIP.FILE
+        AUDIT.REC<13>=PROCESS.JOB.OPTS
+        WRITE AUDIT.REC ON INVOICE.AUDIT, FILE:"*":DATE():"*":TIME()
+        
+        SUM.REC<1,-1>=FILE
+        SUM.REC<2,-1>=FILE.GRAND.TOTAL
+        SUM.REC<3,-1>=FILE.GRAND.COUNT
+        SUM.REC<4,-1>=DCOUNT(ERR<1>,@AM)
+    END
+    
+    IF OUTPUT.OPT='D' THEN
+        E='!zip -m ':TEMPOUT:'.zip ':TEMPOUT
+        EXECUTE E
+        TEMPOUT:='.zip'
+        OPTIONS='PATH'
+        OPTIONS<2>='UU'
+        FROM.USER=@LOGNAME
+        EMAIL=@LOGNAME
+        SOURCE=TEMPOUT
+        SUBJECT='Invoice dump:':FILE
+        CALL SCI.MAIL.SUB(EMAIL, FROM.USER, SOURCE, SUBJECT, OPTIONS)
+        EXECUTE '!rm ':TEMPOUT
+    END
+    
+    PRINT FILE:' PROCESSED'
+    PRINT
+RETURN
+
+GET.NEXT.VALUE:
+    READSEQ VALUE FROM TFILE ELSE VALUE='*END*'
+    IF LINE.CTR#0 THEN THIS.INV:='|':VALUE
+    LINE.CTR+=1
+    IF OUTPUT.OPT='P' THEN
+        IF LINE.CTR/10000=INT(LINE.CTR/10000) THEN PRINT LINE.CTR
+    END
+    IF AUTO THEN
+        * Write all records to new file, but fix the scanline, if needed
+        IF FLD='117' AND SEC.DESC='CADDR' THEN
+            SCANLINE=VALUE
+            IF LEN(SCANLINE) # 25 THEN VALUE=VALUE'L%25'
+        END
+        IF LINE.CTR=1 THEN
+            TVALUE=VALUE:CHAR(10)
+        END ELSE
+            * Hmm, will this trailing | be a problem?
+            TVALUE=VALUE:'|'
+        END
+        OSBWRITE TVALUE ON NFILE ON ERROR STOP 'ERROR WRITING NEWFILE:':NEWFILE
+    END
+RETURN
+
+WRITE.DUMP.LINE:
+    WRITESEQ L APPEND ON TOUT ELSE STOP 'ERROR WRITING TO TMP SEQ'
+RETURN
+
+ADD.ERR.MSG:
+    ERROR=1
+    ERR<1,-1>=INVOICE.NUMBER
+    ERR<2,-1>=CCAN
+    ERR<3,-1>=MSG
+    ERR<4,-1>=LINE.CTR
+    IF BRK='E' THEN PRINT MSG:' - press ENTER:': ; INPUT A
+    * Sometimes errors start to go crazy - cut off at 100
+    IF DCOUNT(ERR<1>,@VM) >= 100 THEN
+        PRINT 'Aborting - too many errors:'
+        GOSUB SEND.ERRORS
+        STOP
+    END
+RETURN
+
+SEND.ERRORS:
+    L='LINE#''R#8':' ':'INV#''R#10':' ':'CCAN''R#10':' ERROR'
+    PRINT L
+    SOURCE=L
+    L=STR('-',8):' ':STR('-',10):' ':STR('-',10):' ':STR('-',60)
+    PRINT L
+    SOURCE<-1>=L
+    FOR F=1 TO DCOUNT(ERR<1>,@VM)
+        L=ERR<4,F>'R#8':' ':ERR<1,F>'R#10':' ':ERR<2,F> 'R#10':' ':ERR<3,F>
+        PRINT L
+        SOURCE<-1>=L
+    NEXT F
+    OPTIONS=''
+    FROM.USER=@LOGNAME
+    EMAIL=@LOGNAME
+    CONVERT @VM TO CHAR(9) IN SOURCE
+    SUBJECT='Invoice errors ':FILE
+    CALL SCI.MAIL.SUB(EMAIL, FROM.USER, SOURCE, SUBJECT, OPTIONS)
+RETURN
+
+CHOOSE.FILE:
+    LOOP
+        PRINT 'Enter the name of the extract file: ':
+        INPUT FILE
+        IF FILE = '' OR FILE = '/' THEN STOP
+        READ REC FROM INVOICE.EXTRACTS, FILE THEN EXIT
+        REC='' ; * We don't actually use this...
+        PRINT 'CANNOT READ ':FILE
+    REPEAT
+    
+    OPTS='B':@AM:'D':@AM:'E':@AM:'P':@AM:'S'
+    LOOP
+        PRINT 'S)end, E)xtract, P)arse, B)rowse or D)ump? ':
+        INPUT OUTPUT.OPT
+        IF OUTPUT.OPT='' OR OUTPUT.OPT='/' THEN STOP
+        LOCATE OUTPUT.OPT IN OPTS SETTING POS THEN EXIT
+    REPEAT
+    
+    EXTRACT.INV.NUMS=''
+    IF OUTPUT.OPT='E' THEN
+        PRINT 'Enter the invoice numbers to extract (comma separated): ':
+        INPUT EXTRACT.INV.NUMS
+        IF EXTRACT.INV.NUMS = '' OR EXTRACT.INV.NUMS = '/' THEN STOP
+    END
+    CONVERT ',' TO @AM IN EXTRACT.INV.NUMS
+    FOR F=1 TO DCOUNT(EXTRACT.INV.NUMS,@AM)
+        EXTRACT.INV.NUMS<F>=TRIM(EXTRACT.INV.NUMS<F>)
+    NEXT F
+    
+    BRK='N'
+    IF OUTPUT.OPT='B' THEN
+        OPTS='E':@AM:'I':@AM:'N':@AM:'S':@AM:'T'
+        LOOP
+            PRINT 'Stop after each S)earch, SecT)ion, I)nvoice, E)rror or N)ever? ':
+            INPUT BRK
+            IF BRK = '' OR BRK = '/' THEN STOP
+            LOCATE BRK IN OPTS SETTING POS THEN EXIT
+        REPEAT
+        
+        IF BRK='S' THEN
+            PRINT 'Search for: ':
+            INPUT SRCH
+            IF SRCH = '' OR SRCH='/' THEN STOP
+        END
+    END
+RETURN
