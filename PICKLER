@@ -6,7 +6,9 @@
 * Comment: Create a self-unpacking archive for dict/data items
 ***************************************************************************
 PROMPT ''
-BLOB=''
+BLOB='PRINT "PICKLED by ':@LOGNAME:' on ':TIMEDATE():' in ':@ACCOUNT:'"'
+BLOB<-1>='R=""'
+BLOB<-1>=''
 LOOP
     PRINT 'OUTPUT FILE:':
     INPUT OUTPUT.FILE
@@ -44,6 +46,24 @@ LOOP
     END
     GOSUB ADD.ITEM
 REPEAT
+* Write out basic code that when run will recreate the record
+BLOB<-1>=''
+BLOB<-1>='OVERWRITE=0'
+BLOB<-1>='FOR F=1 TO DCOUNT(R,@AM)'
+BLOB<-1>='  REC=R<F>'
+BLOB<-1>='  SWAP "#254#" WITH @AM IN REC'
+BLOB<-1>='  SWAP "#134#" WITH "\" IN REC'
+BLOB<-1>='  FILE=REC<1> ; DEL REC<1>'
+BLOB<-1>='  ITEM=REC<1> ; DEL REC<1>'
+BLOB<-1>='  PRINT FILE:" ":ITEM'
+BLOB<-1>='  OPEN FILE TO FVAR ELSE STOP 201, FILE'
+BLOB<-1>='  WFLAG=1'
+BLOB<-1>='  READ DUMMY FROM FVAR, ITEM THEN'
+BLOB<-1>='    IF NOT(OVERWRITE) THEN WFLAG=0 ; PRINT ITEM:" EXISTS, SKIPPED"'
+BLOB<-1>='  END'
+BLOB<-1>='  IF WFLAG THEN WRITE REC ON FVAR,ITEM'
+BLOB<-1>='  CLOSE FVAR'
+BLOB<-1>='NEXT F'
 WRITE BLOB ON OUT.FVAR, OUTPUT.ITEM
 STOP
 
@@ -56,18 +76,12 @@ ADD.ITEM:
         PRINT 'Cannot read ':FILE:' ':ITEM
         RETURN
     END
+    INS ITEM BEFORE REC<1>
+    INS FILE BEFORE REC<1>
     SWAP @AM WITH '#254#' IN REC
     IF INDEX(REC,'\',1) THEN
         SWAP '\' WITH '#134#' IN REC
     END
-    * Write out basic code that when run will recreate the record
-    BLOB<-1>=''
-    BLOB<-1>='PRINT "':FILE:' ':ITEM:'"'
-    BLOB<-1>='OPEN "':FILE:'" TO FVAR ELSE STOP 201,"':FILE:'"'
-    BLOB<-1>='R=\':REC:'\'
-    BLOB<-1>='SWAP "#254#" WITH @AM IN R'
-    BLOB<-1>='SWAP "#134#" WITH "\" IN R'
-    BLOB<-1>='READ DUMMY FROM FVAR, "':ITEM:'" THEN PRINT "':ITEM:' EXISTS, SKIPPED" ELSE WRITE R ON FVAR,"':ITEM:'"'
-    BLOB<-1>='CLOSE FVAR'
-    CLOSE FVAR ;* Jinx, ha!
+    BLOB<-1>='R<-1>=\':REC:'\'
+    CLOSE FVAR
 RETURN
