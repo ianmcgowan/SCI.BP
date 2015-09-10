@@ -56,17 +56,18 @@ ADD.ITEM:
         PRINT 'Cannot read ':FILE:' ':ITEM
         RETURN
     END
+    SWAP @AM WITH '#254#' IN REC
+    IF INDEX(REC,'\',1) THEN
+        SWAP '\' WITH '#134#' IN REC
+    END
+    * Write out basic code that when run will recreate the record
     BLOB<-1>=''
     BLOB<-1>='PRINT "':FILE:' ':ITEM:'"'
     BLOB<-1>='OPEN "':FILE:'" TO FVAR ELSE STOP 201,"':FILE:'"'
-    CONVERT @AM TO CHAR(1) IN REC
-    IF INDEX(REC,'\',1) THEN
-        PRINT FILE:' ':ITEM:' contains \, cannot be pickled'
-        RETURN
-    END
     BLOB<-1>='R=\':REC:'\'
-    BLOB<-1>='CONVERT CHAR(1) TO @AM IN R'
-    * TODO: Should we check for overwriting here?
+    BLOB<-1>='SWAP "#254#" WITH @AM IN R'
+    BLOB<-1>='SWAP "#134#" WITH "\" IN R'
     BLOB<-1>='READ DUMMY FROM FVAR, "':ITEM:'" THEN PRINT "':ITEM:' EXISTS, SKIPPED" ELSE WRITE R ON FVAR,"':ITEM:'"'
     BLOB<-1>='CLOSE FVAR'
+    CLOSE FVAR ;* Jinx, ha!
 RETURN
