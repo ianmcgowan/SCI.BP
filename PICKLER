@@ -1,0 +1,72 @@
+***************************************************************************
+* Program: PICKLER
+* Author : Ian McGowan
+* Date   : 3/20/2014
+* Checkin: $Id: $
+* Comment: Create a self-unpacking archive for dict/data items
+***************************************************************************
+PROMPT ''
+BLOB=''
+LOOP
+    PRINT 'OUTPUT FILE:':
+    INPUT OUTPUT.FILE
+    IF OUTPUT.FILE='' OR OUTPUT.FILE='/' THEN STOP
+    OPEN OUTPUT.FILE TO OUT.FVAR THEN
+        EXIT
+    END ELSE
+        PRINT 'CANNOT OPEN ':OUTPUT.FILE
+    END
+REPEAT
+
+LOOP
+    PRINT 'OUTPUT ITEM:':
+    INPUT OUTPUT.ITEM
+    IF OUTPUT.ITEM='' OR OUTPUT.ITEM='/' THEN STOP
+    READ DUMMY FROM OUT.FVAR, OUTPUT.ITEM THEN
+        PRINT OUTPUT.ITEM:' exists.  Overwrite?  (Y/N):':
+        INPUT OVERWRITE
+        IF OVERWRITE='Y' THEN EXIT
+    END ELSE
+        EXIT
+    END
+REPEAT
+
+LOOP
+    PRINT '(DICT) FILE ITEM:':
+    INPUT L
+    IF L='' OR L='/' THEN EXIT
+    IF FIELD(L,' ',1)='DICT' THEN
+        FILE='DICT ':FIELD(L,' ',2)
+        ITEM=FIELD(L,' ',3)
+    END ELSE
+        FILE=FIELD(L,' ',1)
+        ITEM=FIELD(L,' ',2)
+    END
+    GOSUB ADD.ITEM
+REPEAT
+WRITE BLOB ON OUT.FVAR, OUTPUT.ITEM
+STOP
+
+ADD.ITEM:
+    OPEN FILE TO FVAR ELSE
+        PRINT 'Cannot open ':FILE
+        RETURN
+    END
+    READ REC FROM FVAR, ITEM ELSE
+        PRINT 'Cannot read ':FILE:' ':ITEM
+        RETURN
+    END
+    BLOB<-1>=''
+    BLOB<-1>='PRINT "':FILE:' ':ITEM:'"'
+    BLOB<-1>='OPEN "':FILE:'" TO FVAR ELSE STOP 201,"':FILE:'"'
+    CONVERT @AM TO CHAR(1) IN REC
+    IF INDEX(REC,'\',1) THEN
+        PRINT FILE:' ':ITEM:' contains \, cannot be pickled'
+        RETURN
+    END
+    BLOB<-1>='R=\':REC:'\'
+    BLOB<-1>='CONVERT CHAR(1) TO @AM IN R'
+    * TODO: Should we check for overwriting here?
+    BLOB<-1>='READ DUMMY FROM FVAR, "':ITEM:'" THEN PRINT "':ITEM:' EXISTS, SKIPPED" ELSE WRITE R ON FVAR,"':ITEM:'"'
+    BLOB<-1>='CLOSE FVAR'
+RETURN
