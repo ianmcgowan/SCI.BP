@@ -1,0 +1,59 @@
+***************************************************************************
+* Program: TRIN.VOID.INV.LIST
+* Author : Ian McGowan
+* Date   : 2015-09-14
+* Checkin: $*Id: $
+* Comment: Void invoices in a list
+***************************************************************************
+* $*Log: $
+OPEN 'LS.INV.NUM' TO LS.INV.NUM ELSE STOP 201,'LS.INV.NUM'
+PROMPT ''
+PRINT 'This program will void all invoices in a saved-list you provide'
+PRINT 'Enter the name of the saved-list: ':
+INPUT LIST.NAME
+IF LIST.NAME='' OR LIST.NAME='/' THEN STOP
+PRINT 'Checking it out...  Hang on a tick'
+CTR=0;ERR=0
+EXECUTE \GET.LIST \:LIST.NAME
+LOOP
+    READNEXT ID ELSE EXIT
+    READ REC FROM LS.INV.NUM, ID THEN
+        CTR+=1
+        IF CTR/1000=INT(CTR/1000) THEN PRINT CTR
+    END ELSE
+        PRINT 'Cannot read LS.INV.NUM,':ID
+        ERR+=1
+    END
+REPEAT
+PRINT CTR:' records checked'
+IF CTR=0 THEN
+    STOP 'No invoice records found'
+END
+IF ERR>0 THEN
+    STOP ERR:' Errors, stopping'
+END
+
+PRINT 'Everything seems to be in order. Void (Y/N):':
+INPUT YORN
+IF YORN # 'Y' THEN STOP
+
+TOT=CTR
+CTR=0
+EXECUTE \GET.LIST \:LIST.NAME
+LOOP
+    READNEXT ID ELSE EXIT
+    DATA 1
+    DATA ID
+    DATA ""
+    DATA "N"
+    DATA "Y"
+    DATA ""
+    EXECUTE \VOID.INVOICE.00\
+    CTR+=1
+    IF CTR/100 = INT(CTR/100) THEN
+        * Don't really need this, but prevents slow terminals flipping out
+        PRINT CTR:'/':TOT:' ':INT(CTR/TOT*100):'% Zzzzz'
+        SLEEP 1
+    END
+REPEAT
+PRINT 'COMPLETE'
