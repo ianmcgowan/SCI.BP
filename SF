@@ -1,0 +1,132 @@
+***************************************************************************
+* Program: SF
+* Author : Matt Carroll
+* Date   : 1997
+* Edited : 11:09:29 Mar 23 1999 By MCGOWAN
+* Comment: Search a file for a string
+***************************************************************************
+* Date       User  Description
+* 12/30/1997 IAN   Allow DICT, no SSELECT, subroutine for options, no case
+* 06/16/1998 IAN   Check for a key press while scanning, stop if "/" entered
+* ??/??/1998 MATT  USE ESEARCH
+* 11/18/1998 IAN   Search for lower, proper case as well as upper
+* 03/23/1999 IAN   Fixed matt's implementation of ESEARCH
+
+$INCLUDE BAL.EXPORT SCREEN.VARS
+FILE = FIELD(@SENTENCE," ",2)
+ICTR=3
+IF FILE='DICT' THEN
+   ICTR+=1
+   FILE='DICT ':FIELD(@SENTENCE," ",3)
+END
+IF FILE='' THEN
+   PRINT ; PRINT "Enter file or dictionary to search: ": ; INPUT FILE
+   IF FILE='' OR FILE='/' THEN STOP
+END
+
+MAX.HITS = FIELD(@SENTENCE," ",ICTR+1)
+IF MAX.HITS < 1 THEN MAX.HITS = 9999
+
+OPEN FILE TO FVAR ELSE STOP 201,FILE
+SSTR = FIELD(@SENTENCE," ",ICTR)
+
+PROG = "SF" ; PROG.DESC = "SEARCH A FILE"
+
+FIRST.LINE=5 ; MAX.LINE=20
+PAGE.LEN=MAX.LINE-FIRST.LINE
+
+LOOP
+   CALL SCREEN.HDR(PROG,PROG.DESC)
+
+   IF SSTR = "" THEN
+      PRINT ; PRINT "Enter search string: ": ; INPUT SSTR
+      IF SSTR = "" OR SSTR = "/" THEN STOP
+   END
+   SSTR1=UPCASE(SSTR)
+   SSTR2=DOWNCASE(SSTR)
+   SSTR3=OCONV(SSTR,"MCT")
+
+   FOUND.SET = "" ; DETAIL.SET="" ; HIT.CTR=0
+   IF MAX.HITS > 0 THEN MH.STR = "" ELSE MH.STR = ""
+   PRINT @(0,FIRST.LINE-2):\SEARCHING FOR "\:SSTR1:\,\:SSTR2:\,\:SSTR3:\" IN \:FILE:\ - \:MH.STR:EOS:
+   DATA SSTR
+   DATA SSTR1
+   DATA SSTR2
+   DATA SSTR3
+   DATA @AM
+   EXECUTE \ESEARCH \:FILE:\ WITH @ID # "_]" \ CAPTURING DUMMY
+
+   CTR=1
+   LOOP
+      READNEXT ID ELSE EXIT
+      CTR+=1
+      READ REC FROM FVAR,ID THEN
+         IDX = INDEX(UPCASE(REC),SSTR1,1)
+         IF IDX OR INDEX(UPCASE(ID),SSTR1,1) THEN
+            HIT.CTR +=1
+            IDX -= 10 ; IF IDX < 1 THEN IDX=1
+            LINE=REC[IDX,45]
+            CONVERT @VM TO "]" IN LINE
+            CONVERT @AM TO "~" IN LINE
+            LOCATE ID IN FOUND.SET BY 'AL' SETTING POS ELSE
+               INS ID BEFORE FOUND.SET<POS>
+               INS LINE BEFORE DETAIL.SET<POS>
+            END
+         END
+      END
+      IF HIT.CTR >= MAX.HITS THEN EXIT
+   REPEAT
+   IF HIT.CTR=0 THEN
+       PRINT SSTR:' Not found'
+       PRINT "PRESS ENTER TO CONT": ; INPUT TEST
+       STOP
+   END
+   LIST='B':VM:'E':VM:'F':VM:'N':VM:'S':VM:'Q'
+   DESC='Back':VM:'Edit':VM:'Forward':VM:'New':VM:'Save':VM:'Quit'
+   LINE.CTR=FIRST.LINE ; IDX=1
+
+   NEW.SEARCH=0
+   LOOP
+      PRINT @(0,LINE.CTR):IDX'R#3':". ":FOUND.SET<IDX> "L#25":"->":DETAIL.SET<IDX>:
+      LINE.CTR+=1 ; IDX+=1
+      IF LINE.CTR >= MAX.LINE THEN GOSUB OPTIONS
+   UNTIL NEW.SEARCH DO
+   REPEAT
+REPEAT
+STOP
+
+OPTIONS:
+   OPT='F'
+   CALL LOTUS(LIST,DESC,OPT)
+   BEGIN CASE
+      CASE OPT='F'
+         NULL
+      CASE OPT='E'
+         PRINT BOTTOM:'Enter # to edit :': ; INPUT N
+         IF N # '' AND N # '/' AND NUM(N) THEN
+            EXECUTE "AE ":FILE:" ":FOUND.SET<N>
+         END
+         IDX-=PAGE.LEN ; IF IDX < 1 THEN IDX=1
+         GOSUB PAINT
+      CASE OPT = "B"
+         IDX-=PAGE.LEN*2 ; IF IDX<1 THEN IDX=1
+      CASE OPT = "N"
+         SSTR=""
+         NEW.SEARCH=TRUE
+      CASE OPT = "S"
+         SELECT FOUND.SET TO SL
+         PRINT 'SAVE.LIST ':UPCASE(@LOGNAME)
+         EXECUTE \SAVE.LIST \:UPCASE(@LOGNAME) PASSLIST SL
+         STOP
+      CASE OPT = "Q"
+         STOP
+   END CASE
+   LINE.CTR = FIRST.LINE
+   PRINT @(0,FIRST.LINE):EOS:
+RETURN
+
+PAINT:
+   CALL SCREEN.HDR(PROG,PROG.DESC)
+   PRINT @(0,FIRST.LINE-2):\SEARCHING FOR "\:SSTR:\" IN \:FILE:\ - \:
+   PRINT HIT.CTR:" Items found":
+RETURN
