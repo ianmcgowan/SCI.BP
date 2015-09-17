@@ -1,0 +1,42 @@
+***************************************************************************
+* Program: LIST.MINUS
+* Author : mcgowan
+* Date   : 05/21/2002
+* Edited : 09:06:58 May 21 2002 By MCGOWAN
+* Comment: Given 2 lists, make a new list that is LIST1 - LIST2
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- ---------------------------------------------------------
+PROMPT ''
+PRINT 'This program will subtract list two from list one'
+
+PRINT 'Enter list one:':
+INPUT LIST1
+IF LIST1 = "" OR LIST1 = "/" THEN STOP
+
+PRINT 'Enter list two:':
+INPUT LIST2
+IF LIST2 = "" OR LIST2 = "/" THEN STOP
+
+PRINT 'Enter the name for a new list:':
+INPUT LIST3
+IF LIST3 = "" OR LIST3 = "/" THEN STOP
+
+EXECUTE \GET.LIST \:LIST2 RTNLIST L2
+READSELECT ARR2 FROM L2 ELSE ABORT
+
+NEW.LIST=""
+EXECUTE \GET.LIST \:LIST1 RTNLIST L1
+LOOP
+   READNEXT ID FROM L1 ELSE EXIT
+   LOCATE ID IN ARR2 SETTING POS ELSE
+      INS ID BEFORE NEW.LIST<-1>
+   END
+REPEAT
+
+* Not sure what this L3 is used for - the FORMLIST command seems to
+* ignore it and always use the default select list
+L3=""
+FORMLIST NEW.LIST TO L3
+EXECUTE \SAVE.LIST \:LIST3
+PRINT 'New list saved as ':LIST3
