@@ -1,0 +1,263 @@
+***************************************************************************
+* Program: PACKAGE
+* Author : Ian McGowan
+* Date   : 02/04/2015
+* Checkin: $*Id: $
+* Comment: Create a package file in package folder
+***************************************************************************
+GOSUB INIT
+GOSUB GET.PROGRAM.INFO
+GOSUB CREATE.PACKAGE
+GOSUB CLEAN.UP
+STOP
+
+INIT:
+    PROMPT ""
+    OPEN "VOC" TO VOC ELSE STOP 201,"VOC"
+    PACKAGE.DIR="/info/DEVEL/PACKAGES"
+    
+    OPTIONS="DIR":@VM:PACKAGE.DIR:@VM:"/info/DEVEL/DEVEL.DICT"
+    CALL TRIN.OPEN(PACKAGE, ERR, "PACKAGE", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    OPTIONS="F":@VM:"/info/DEVEL/PACKAGE.DATA":@VM:"/info/DEVEL/D_PACKAGE.DATA"
+    CALL TRIN.OPEN(PACKAGE.DATA, ERR, "PACKAGE.DATA", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    OPTIONS="F":@VM:"/info/DEVEL/PACKAGE.AUDIT":@VM:"/info/DEVEL/D_PACKAGE.AUDIT"
+    CALL TRIN.OPEN(PACKAGE.AUDIT, ERR, "PACKAGE.AUDIT", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    PROG.LIST=""
+    MANIFEST=""
+    PACKAGE.NAME=""
+    CALL TRIN.GET.ARGS(@SENTENCE, ARGS, PARAMS, OPTIONS)
+    IF PARAMS<1>='H' OR PARAMS<1>='?' THEN GOSUB USAGE
+    NUM.ARGS=DCOUNT(ARGS<1>,@VM)
+    BEGIN CASE
+        CASE NUM.ARGS=0
+            * No arguments, create a new package
+            GOSUB NEW.PACKAGE
+        CASE NUM.ARGS=1
+            * Re-deploy a an existing package, or create new package
+            PACKAGE.NAME=ARGS<1,1>
+            READ PROG.LIST FROM PACKAGE.DATA, PACKAGE.NAME THEN
+                GOSUB EDIT.PACKAGE
+            END ELSE
+                GOSUB NEW.PACKAGE
+            END
+        CASE NUM.ARGS=2
+            * Quick deploy - just one program
+            PROG.LIST<1> = ARGS<1,1>
+            PROG.LIST<2> = ARGS<1,2>
+            PACKAGE.NAME = ARGS<1,2>
+            PACKAGE.DESC = ARGS<1,2>
+            PROG.LIST<4> = PACKAGE.DESC
+        CASE 1
+            GOSUB USAGE
+    END CASE
+RETURN
+
+USAGE:
+    PRINT "Usage:"
+    PRINT "PACKAGE                - Create new package"
+    PRINT "PACKAGE <package-name> - Redeploy <package-name>"
+    PRINT "PACKAGE <bp> <prog>    - Quick deploy for one program"
+    STOP
+RETURN
+
+EDIT.PACKAGE:
+    PACKAGE.DESC=PROG.LIST<4>
+    PRINT PACKAGE.NAME:" exists"
+    PRINT "Would you like to D)elete, E)dit, R)ebuild or Q)uit? ":
+    INPUT OPT
+    BEGIN CASE
+        CASE OPT='R'
+            RETURN
+        CASE OPT='D'
+            OP='DELETE' ; GOSUB AUDIT.LOG
+            DELETE PACKAGE.DATA, PACKAGE.NAME
+            STOP
+        CASE OPT='E'
+            EXECUTE "AE PACKAGE.DATA ":PACKAGE.NAME
+            OP='EDIT' ; GOSUB AUDIT.LOG
+            READ PROG.LIST FROM PACKAGE.DATA, PACKAGE.NAME THEN
+                PACKAGE.DESC=PROG.LIST<4>
+                RETURN
+            END
+            STOP "PACKAGE.DATA MISSING"
+        CASE 1
+            STOP
+    END CASE
+RETURN
+
+NEW.PACKAGE:
+    IF PACKAGE.NAME = "" THEN
+        PRINT "Enter Package Name: ":
+        INPUT PACKAGE.NAME
+    END
+    IF PACKAGE.NAME = "" OR PACKAGE.NAME = "/" THEN STOP
+    READ PROG.LIST FROM PACKAGE.DATA, PACKAGE.NAME THEN
+        GOSUB EDIT.PACKAGE
+        RETURN
+    END
+    
+    PRINT "Enter Package Description: ":
+    INPUT PACKAGE.DESC
+    IF PACKAGE.DESC = "" OR PACKAGE.DESC = "/" THEN STOP
+    PROG.LIST<4>=PACKAGE.DESC
+    
+    * You can enter multiple programs
+    LOOP
+        BP=""; PROG.NAME=""
+        PRINT "Enter BP (Enter when finished): ":
+        INPUT BP
+        IF BP = "/" THEN STOP
+        IF BP = ""  THEN EXIT
+        IF INDEX(BP, " ", 1) THEN
+            PROG.NAME=FIELD(BP," ",2)
+            BP=FIELD(BP," ",1)
+        END
+        OPEN BP TO BP.F ELSE
+            PRINT BP:" cannot be opened"
+            CONTINUE
+        END
+        IF PROG.NAME = "" THEN
+            PRINT "Enter Program: ":
+            INPUT PROG.NAME
+            IF PROG.NAME = "/" THEN STOP
+        END
+        READ PROG FROM BP.F, PROG.NAME ELSE
+            PRINT "CANNOT READ ":PROG.NAME
+            CLOSE BP.F
+            CONTINUE
+        END
+        CLOSE BP.F
+        PROG.LIST<1,-1>=BP
+        PROG.LIST<2,-1>=PROG.NAME
+    REPEAT
+RETURN
+
+GET.PROGRAM.INFO:
+    * Make sure we can read all programs and get the catalog state
+    FOR PROG.CTR=1 TO DCOUNT(PROG.LIST<1>,@VM)
+        BP=PROG.LIST<1,PROG.CTR>
+        PROG.NAME=PROG.LIST<2,PROG.CTR>
+        OPEN BP TO BP.F ELSE STOP 201, BP
+        READ PROG FROM BP.F, PROG.NAME ELSE STOP 20145, PROG.NAME, BP
+        CLOSE BP.F
+        CALL GET.CATALOG(PROG.NAME, CATALOG, ERR, OPTIONS)
+        IF ERR # "" THEN STOP ERR
+        IF LEN(CATALOG) # 1 THEN
+            STOP 'Error with ':PROG.NAME:' - catalog=':CATALOG
+        END
+        PROG.LIST<3,PROG.CTR>=CATALOG
+    NEXT PROG.CTR
+    WRITE PROG.LIST ON PACKAGE.DATA, PACKAGE.NAME
+RETURN
+
+CREATE.PACKAGE:
+    * Creating a package consists of the steps:
+    * 1) Make a temp directory
+    * 2) Compile the programs, direct the object code to temp dir
+    * 3) Create and write the manifest.txt to the temp dir
+    * 4) Tar up the temp dir and move to /info/DEVEL/PACKAGES
+    E=\!echo ${TMP}\:PACKAGE.NAME
+    EXECUTE E CAPTURING TMP
+    TMP=TMP<1>
+    E=\!rm -rf \:TMP:\; mkdir \:TMP
+    PRINT E
+    EXECUTE E
+    PRINT TMP
+    * Create a temp VOC pointer,
+    R="DIR":@AM:TMP:@AM:"D_VOC"
+    VPTR="BP.OBJ.TMP.":PACKAGE.NAME
+    WRITE R ON VOC, VPTR
+    OPEN VPTR TO TMP.F ELSE STOP 201, VPTR
+    
+    * Now compile all the programs direct to our temp BP.OBJ
+    FOR PROG.CTR=1 TO DCOUNT(PROG.LIST<1>,@VM)
+        BP=PROG.LIST<1,PROG.CTR>
+        PROG.NAME=PROG.LIST<2,PROG.CTR>
+        * First the source
+        OPEN BP TO BP.F ELSE STOP 201, BP
+        READ PROG FROM BP.F, PROG.NAME ELSE STOP 20145, PROG.NAME, BP
+        WRITE PROG ON TMP.F, PROG.NAME
+        CLOSE BP.F
+        
+        * Now the object
+        E=\BASIC \:BP:\ TO \:VPTR:\ \:PROG.NAME:\ -D\
+        PRINT E
+        EXECUTE E RETURNING ERR
+        IF @SYSTEM.RETURN.CODE # 0 THEN
+            GOSUB CLEAN.UP
+            STOP "ERROR COMPILING"
+        END
+    NEXT PROG.CTR
+    
+    MANIFEST=""
+    MANIFEST<1>=PACKAGE.NAME
+    MANIFEST<2>=OCONV(DATE(),"D4/")
+    MANIFEST<3>=OCONV(TIME(),"MTS")
+    MANIFEST<4>=@LOGNAME
+    MANIFEST<5>=@ACCOUNT
+    E=\!hostname\
+    EXECUTE E CAPTURING H
+    H=H<1>
+    MANIFEST<6>=H
+    MANIFEST<7>=PROG.LIST<1>
+    MANIFEST<8>=PROG.LIST<2>
+    MANIFEST<9>=PROG.LIST<3>
+    MANIFEST<10>=PACKAGE.DESC
+    WRITE MANIFEST ON TMP.F, "MANIFEST.TXT"
+    CLOSE TMP.F
+    
+    E=\!cd ${TMP} ; tar cvf \:PACKAGE.DIR:"/":PACKAGE.NAME:\.tar \
+    E:=\./\:PACKAGE.NAME
+    PRINT E
+    EXECUTE E
+    
+    OP='BUILD' ; GOSUB AUDIT.LOG
+    PRINT "Package created in ":PACKAGE.DIR:"/":PACKAGE.NAME:".tar"
+RETURN
+
+AUDIT.LOG:
+    AUDIT.REC=MANIFEST
+    IF MANIFEST="" THEN
+        AUDIT.REC<7>=PROG.LIST<1>
+        AUDIT.REC<8>=PROG.LIST<2>
+        AUDIT.REC<9>=PROG.LIST<3>
+        AUDIT.REC<10>=PACKAGE.DESC
+    END
+    AUDIT.KEY=PACKAGE.NAME:"*":OP:"*":DATE():"*":TIME():"*":@LOGNAME
+    WRITE AUDIT.REC ON PACKAGE.AUDIT, AUDIT.KEY
+RETURN
+
+CLEAN.UP:
+    * rm -rf $TMP, but let's make sure TMP is ok
+    IF INDEX(FIELD(TMP,"/",2),"tmp",1) # 0 THEN
+        E="!rm -rf ":TMP
+        PRINT E
+        EXECUTE E
+    END
+    DELETE VOC, VPTR
+RETURN
+
+CHECK.FOR.EXISTING:
+    * RETURNS PROG.LIST AND EXISTING=0 OR 1
+    EXISTING=0
+    E=\SELECT PACKAGES WITH @ID = "\:PACKAGE.NAME:\.tar"\
+    E:=\ OR "_\:PACKAGE.NAME:\.tar"\
+    PRINT E
+    EXECUTE E
+    IF @SYSTEM.RETURN.CODE = 0 THEN RETURN
+    LOOP
+        READNEXT ID ELSE EXIT
+        PRINT ID
+    REPEAT
+    PRINT ; PRINT PACKAGE.NAME:" already exists - delete it and refresh? ":
+    INPUT YORN
+    IF YORN # "Y" THEN STOP
+    CALL PACKAGE.GET.MANIFEST(PACKAGE.NAME, PROG.LIST, MANIFEST, OPTIONS)
+    IF PROG.LIST # "" THEN EXISTING=1
+RETURN
