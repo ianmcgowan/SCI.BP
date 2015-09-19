@@ -1,0 +1,420 @@
+***************************************************************************
+* Program: DEPLOY
+* Author : Ian McGowan
+* Date   : 03/01/2015
+* Comment: Deploy a package!
+***************************************************************************
+INCLUDE BP.DEV SCREEN.VARS
+
+GOSUB INIT
+EXIT.FLAG=0 ; ANS="B"
+LOOP
+    GOSUB SHOW.PAGE
+    CALL LOTUS(LIST,DESC,ANS)
+    LOCATE ANS IN LIST<1> SETTING POS THEN
+        ON POS GOSUB DO.ARCHIVE, DO.BACK, DO.DEPLOY, DO.FORWARD, DO.PROD, DO.QUIT, DO.SHOW
+    END
+UNTIL EXIT.FLAG DO
+REPEAT
+STOP
+
+AUDIT.LOG:
+    AUDIT.REC=MANIFEST
+    IF MANIFEST="" THEN
+        AUDIT.REC<7>=PROG.LIST<1>
+        AUDIT.REC<8>=PROG.LIST<2>
+        AUDIT.REC<9>=PROG.LIST<3>
+        AUDIT.REC<10>=PROG.LIST<4>
+    END
+    AUDIT.PACKAGE=PACKAGE.NAME
+    IF PACKAGE.NAME[1,1]="_" THEN AUDIT.PACKAGE=PACKAGE.NAME[2,99]
+    AUDIT.KEY=AUDIT.PACKAGE:"*":OP:"*":DATE():"*":TIME():"*":@LOGNAME
+    WRITE AUDIT.REC ON PACKAGE.AUDIT, AUDIT.KEY
+RETURN
+
+DO.PROD:
+    IF ARCHIVE=1 THEN
+        PRINT ERROR:'Cannot promote archived packages! [PRESS ENTER]':
+        INPUT AAA:
+        RETURN
+    END
+    IF PROD=1 THEN
+        PRINT ERROR:'Cannot promote from production! [PRESS ENTER]':
+        INPUT AAA:
+        RETURN
+    END
+    PRMT="Enter package to promote to production:"
+    GOSUB CHOOSE.PACKAGE
+    IF PACKAGE.NAME="" THEN RETURN
+    GOSUB DISP.PACKAGE
+    PRINT EDITROW:"Promote to production (Y/N): ":
+    INPUT YORN
+    IF YORN # "Y" THEN RETURN
+    PRINT CS:
+    E=\!scp \:PACKAGE.FILE:\ user@securetransport:folder\
+    PRINT E
+    EXECUTE E
+    PRINT "Deployed, please give it a minute or two to arrive.  Press [ENTER]:":
+    OP="PROMOTE" ; GOSUB AUDIT.LOG 
+    GOSUB ASK.ARCHIVE
+RETURN
+
+DO.SHOW:
+    PRMT="Enter package to show:"
+    GOSUB CHOOSE.PACKAGE
+    IF PACKAGE.NAME="" THEN RETURN
+    GOSUB DISP.PACKAGE
+    IF ARCHIVE=1 THEN
+        GOSUB ASK.ARCHIVE
+    END
+    PRINT EDITROW:EOL:"H)istory or [ENTER] to continue:":
+    INPUT HIST:
+    IF HIST="H" THEN GOSUB SHOW.HIST
+RETURN
+
+SHOW.HIST:
+    E=\SORT PACKAGE.AUDIT WITH PACKAGE.NAME = "\:PACKAGE.NAME:\"\
+    E:=\ OPERATION DATE TIME USER \
+    E:=\ BY DATE BY TIME (I\
+    PRINT E
+    EXECUTE E
+    PRINT "[ENTER] to continue:":
+    INPUT AAA:
+RETURN
+
+ASK.ARCHIVE:
+    IF ARCHIVE=1 THEN
+        PRINT EDITROW:"Would you like to unarchive this package? (Y/N): ":
+        INPUT YORN
+        IF YORN # 'Y' THEN RETURN
+        FROM.PACKAGE="_":PACKAGE.NAME:".tar"
+        TO.PACKAGE=PACKAGE.NAME:".tar"
+        OP="UNARCHIVE"
+    END ELSE
+        PRINT EDITROW:"Would you like to archive this package? (Y/N): ":
+        INPUT YORN
+        IF YORN # 'Y' THEN RETURN
+        FROM.PACKAGE=PACKAGE.NAME:".tar"
+        TO.PACKAGE="_":PACKAGE.NAME:".tar"
+        OP="ARCHIVE"
+    END
+    E=\!cd \:PACKAGE.DIR:\; mv \:FROM.PACKAGE:\ \:TO.PACKAGE
+    PRINT E
+    EXECUTE E
+    PRINT "Done! Press [ENTER]:":
+    INPUT AAA
+    GOSUB AUDIT.LOG
+    * Doing this twice will force a reload of the packages...
+    GOSUB TOGGLE.ARCHIVE
+    GOSUB TOGGLE.ARCHIVE
+RETURN
+
+CHOOSE.PACKAGE:
+    PACKAGE.NAME=""
+    PACKAGE.FILE=""
+    PACKAGE.TMPDIR=""
+    LOOP
+        PRINT EDITROW:PRMT:EOS:
+        INPUT P:
+        IF P="" THEN EXIT
+        IF NUM(P) AND P=INT(P) AND P>0 AND P<=IDX.LAST THEN
+            PACKAGE.FILE=PACKAGE.DIR:PACKAGE.LIST<P>
+            PACKAGE.NAME=PACKAGE.LIST<P>[1,LEN(PACKAGE.LIST<P>)-4]
+            IF ARCHIVE THEN PACKAGE.NAME=PACKAGE.NAME[2,99]
+            PACKAGE.TMPDIR=PACKAGE.DIR:PACKAGE.NAME
+        END
+    UNTIL PACKAGE.NAME # "" DO
+    REPEAT
+RETURN
+
+DO.REMOVE:
+    IF ARCHIVE=1 THEN
+        PRINT ERROR:'Cannot remove archived packages! [PRESS ENTER]':
+        INPUT AAA:
+        RETURN
+    END
+    PRMT="Enter package to remove:"
+    GOSUB CHOOSE.PACKAGE
+    IF PACKAGE.NAME="" THEN RETURN
+    GOSUB DISP.PACKAGE
+    IF PROG.LIST="" THEN
+        PRINT ERROR:"Cannot read manifest for package: ":PACKAGE.NAME:
+        PRINT " - [PRESS ENTER]":
+        INPUT AAA:
+        RETURN
+    END
+    PRINT EDITROW:"Really remove ":PACKAGE.NAME:" (Y/N):":
+    INPUT YORN
+    IF YORN # "Y" THEN RETURN
+    E=\!rm -rf \:PACKAGE.TMPDIR
+    PRINT E
+    EXECUTE E
+    E=\!rm -f \:PACKAGE.FILE
+    PRINT E
+    EXECUTE E
+    PRINT 'Removed! [PRESS ENTER]:':
+    INPUT AAA
+    OP="REMOVE" ; GOSUB AUDIT.LOG
+    * Doing this twice will force a reload of the packages...
+    GOSUB TOGGLE.ARCHIVE
+    GOSUB TOGGLE.ARCHIVE
+RETURN
+
+DO.DEPLOY:
+    IF ARCHIVE=1 THEN
+        PRINT ERROR:'Cannot deploy archived packages! [PRESS ENTER]':
+        INPUT AAA:
+        RETURN
+    END
+    
+    PRMT="Enter package to deploy:"
+    GOSUB CHOOSE.PACKAGE
+    IF PACKAGE.NAME = "" THEN RETURN
+    GOSUB DISP.PACKAGE
+    IF PROG.LIST="" THEN
+        PRINT ERROR:"Cannot read manifest for package: ":PACKAGE.NAME:
+        PRINT " - [PRESS ENTER]":
+        INPUT AAA:
+        RETURN
+    END
+    PRINT EDITROW:"Deploy ":PACKAGE.NAME:" (Y/N):":
+    INPUT YORN:
+    IF YORN # "Y" THEN RETURN
+    
+    * Actually deploy - steps are:
+    * 1) Untar the package file
+    * 2) For each program:
+    *    a) copy the object code to the appropriate place (BP.OBJ for global)
+    *       or CTLG for local.  Throw an error for direct.
+    *    b) for local, create a VOC pointer
+    *       for global, no VOC needed
+    
+    PRINT CS:
+    E=\!rm -rf \:PACKAGE.TMPDIR
+    EXECUTE E CAPTURING DUMMY
+    E=\!cd \:PACKAGE.DIR:\ ; tar xvf \:PACKAGE.NAME:\.tar\
+    PRINT E
+    EXECUTE E
+    
+    AUTORUN=""
+    FOR PROG.CTR=1 TO DCOUNT(PROG.LIST<1>,@VM)
+        BP=PROG.LIST<1,PROG.CTR>
+        PROG=PROG.LIST<2,PROG.CTR>
+        IF INDEX(PROG,"AUTORUN",1) THEN AUTORUN<-1>=PROG
+        CATLOG=PROG.LIST<3,PROG.CTR>
+        GOSUB COPY.CATALOG
+    NEXT P
+    
+    FOR PROG.CTR=1 TO DCOUNT(AUTORUN,@AM)
+        PROG=AUTORUN<PROG.CTR>
+        PRINT "AUTORUN:":PROG
+        EXECUTE PROG
+    NEXT PROG.CTR
+    
+    * Send an email
+    RECIP.LIST=DEPLOY.EMAIL.LIST
+    FROM.USER=@LOGNAME
+    SUBJECT=PACKAGE.NAME:" deployed on ":HOSTNAME:" in ":@ACCOUNT
+    SOURCE=PSUM
+    OPTIONS=""
+    CALL TRIN.MAIL.SUB(RECIP.LIST, FROM.USER, SOURCE, SUBJECT, OPTIONS)
+    
+    PRINT "Deploy complete! - Press [ENTER]":
+    INPUT AAA
+    * Reset the screen before asking the question - looks funky otherwise
+    CALL SCREEN.HDR('DEPLOY','Package Maintenance')
+    GOSUB DISP.PACKAGE
+    OP="DEPLOY" ; GOSUB AUDIT.LOG
+    GOSUB ASK.ARCHIVE
+RETURN
+
+COPY.CATALOG:
+    * First copy the source code
+    IF PROD THEN
+        DEST.FILE=PROG
+        READV DEST.PATH FROM VOC, BP, 2 ELSE STOP BP:" POINTER MISSING"
+        SOURCE.PATH=PACKAGE.TMPDIR:"/":DEST.FILE
+        E="!cp ":SOURCE.PATH:" ":DEST.PATH:"/":DEST.FILE
+        PRINT E
+        EXECUTE E
+    END
+    
+    * Copy the object code to the right place, then catalog
+    DEST.FILE="_":PROG
+    SOURCE.PATH=PACKAGE.TMPDIR:"/":DEST.FILE
+    IF CATLOG='G' THEN
+        * Send it to the global catalog table
+        DEST.PATH=BP.OBJ.PATH
+    END ELSE
+        READV DEST.PATH FROM VOC, BP, 2 ELSE STOP BP:" POINTER MISSING"
+    END
+    E="!cp ":SOURCE.PATH:" ":DEST.PATH:"/":DEST.FILE
+    PRINT E
+    EXECUTE E
+    IF CATLOG='G' THEN
+        E="CATALOG BP.OBJ ":PROG:" FORCE"
+        PRINT E
+        EXECUTE E
+    END ELSE
+        E="CATALOG ":BP:" ":PROG:" LOCAL FORCE"
+        PRINT E
+        EXECUTE E
+        OPEN BP TO BP.TMP THEN DELETE BP.TMP, "_":PROG ; CLOSE BP.TMP
+        * The standard local catalog is not that local, fix it
+        READ R FROM VOC, PROG THEN
+            * Turn /info/ACC/CTLG/TRIN.DDD to CTLG/TRIN.DDD
+            R<2>=R<2>[LEN(@ACCOUNT)+2,999]
+            WRITE R ON VOC, PROG
+        END
+    END
+RETURN
+
+DISP.PACKAGE:
+    IF ARCHIVE THEN PNAME="_":PACKAGE.NAME ELSE PNAME=PACKAGE.NAME
+    CALL PACKAGE.GET.MANIFEST(PNAME, PROG.LIST, MANIFEST, OPTIONS)
+    IF PROG.LIST="" THEN RETURN
+    PRINT @(1,2):EOS
+    * Store all this in a string, for later emailing
+    PSUM=""
+    PSUM<-1>="Package""L#20":MANIFEST<1>
+    PSUM<-1>="Description""L#20":MANIFEST<10>
+    PSUM<-1>="Date Created""L#20":MANIFEST<2>
+    PSUM<-1>="Time Created""L#20":MANIFEST<3>
+    PSUM<-1>="Created by User""L#20":MANIFEST<4>
+    PSUM<-1>="Created in Account""L#20":MANIFEST<5>
+    PSUM<-1>="Created on Host""L#20":MANIFEST<6>
+    PSUM<-1>=""
+    PSUM<-1>="Programs"
+    PSUM<-1>=STR('-',70)
+    FOR P=1 TO DCOUNT(PROG.LIST<1>,@VM)
+        L=P'R#2':') ':PROG.LIST<1,P>'L#10':PROG.LIST<2,P>'L#25'
+        CATLOG=PROG.LIST<3,P>
+        BEGIN CASE
+            CASE CATLOG='G' ; L:='GLOBAL'
+            CASE CATLOG='L' ; L:='LOCAL'
+            CASE CATLOG='D' ; L:='DIRECT'
+            CASE 1          ; L:=CATLOG
+        END CASE
+        PSUM<-1>=L
+    NEXT P
+    FOR P=1 TO DCOUNT(PSUM,@AM)
+        PRINT PSUM<P>
+    NEXT P
+RETURN
+
+DO.ARCHIVE:
+    GOSUB TOGGLE.ARCHIVE
+RETURN
+
+DO.BACK:
+    CUR.IDX=CUR.IDX-IDX.PAGE
+    IF CUR.IDX<1 THEN CUR.IDX=1
+RETURN
+
+DO.FORWARD:
+    CUR.IDX=CUR.IDX+IDX.PAGE
+    IF CUR.IDX>IDX.LAST THEN CUR.IDX=CUR.IDX-IDX.PAGE
+RETURN
+
+DO.QUIT:
+    EXIT.FLAG=1
+RETURN
+
+SHOW.PAGE:
+    CALL SCREEN.HDR('DEPLOY','Package Maintenance')
+    COL=1 ; ROW=1 ; IDX=CUR.IDX
+    PRINT @(1,2):EOS:SPACE(30):
+    IF ARCHIVE THEN PRINT "Archived Packages": ELSE PRINT "Active Packages":
+    LOOP
+        PRINT @(COL, 2+ROW):IDX'R#3':') ':PACKAGE.LIST<IDX>'L#25':
+        IDX+=1
+    UNTIL IDX>IDX.LAST DO
+        ROW+=1
+        IF ROW > MAX.ROW THEN
+            COL+=WID
+            IF COL>MAX.COL THEN
+                *PRINT @(COL-WID,2+ROW):"*more*":
+                EXIT
+            END
+            ROW=1
+        END
+    REPEAT
+    * This calculates how many entries are on a page, first time thru
+    IF IDX.PAGE="" THEN IDX.PAGE=IDX-1
+RETURN
+
+INIT:
+    EXECUTE "!hostname" CAPTURING HOSTNAME
+    HOSTNAME=HOSTNAME<1>
+    IF HOSTNAME[1,2]="xp" THEN PROD=1 ELSE PROD=0
+    OPEN "VOC" TO VOC ELSE STOP 201,"VOC"
+    OPEN "CTLGTB" TO CTLGTB ELSE STOP 201,"CTLGTB"
+    OPEN "CTLG" TO CTLG ELSE STOP 201,"CTLG"
+    READV BP.OBJ.PATH FROM VOC, "BP.OBJ", 2 ELSE STOP "CANNOT READ VOC BP.OBJ"
+    PACKAGE.DIR="/info/DEVEL/PACKAGES/"
+    
+    * Open files, create pointers if not found
+    OPTIONS="DIR":@VM:PACKAGE.DIR:@VM:"/info/DEVEL/DEVEL.DICT"
+    CALL TRIN.OPEN(PACKAGE, ERR, "PACKAGE", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    OPTIONS="F":@VM:"/info/DEVEL/PACKAGE.DATA":@VM:"/info/DEVEL/D_PACKAGE.DATA"
+    CALL TRIN.OPEN(PACKAGE.DATA, ERR, "PACKAGE.DATA", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    OPTIONS="F":@VM:"/info/DEVEL/PACKAGE.AUDIT":@VM:"/info/DEVEL/D_PACKAGE.AUDIT"
+    CALL TRIN.OPEN(PACKAGE.AUDIT, ERR, "PACKAGE.AUDIT", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    OPTIONS="DIR":@VM:"/info/DEVEL/TRIN.GLOBAL.PARAMETER":@VM:"/info/DEVEL/DEVEL.DICT"
+    CALL TRIN.OPEN(GLOBAL.PARAM, ERR, "TRIN.GLOBAL.PARAMETER", OPTIONS)
+    IF ERR # "" THEN STOP ERR
+    
+    READ AUTH.USERS FROM GLOBAL.PARAM, "DEVSERVICES" ELSE
+        STOP "Cannot read TRIN.GLOBAL.PARAMETER, DEVSERVICES"
+    END
+    LOCATE UPCASE(@LOGNAME) IN AUTH.USERS<1> SETTING POS ELSE
+        IF PROD THEN STOP "Cannot find ":@LOGNAME:" in DEVSERVICES"
+    END
+    IF PROD THEN
+        READ DEPLOY.EMAIL.LIST FROM GLOBAL.PARAM, "DEPLOY.EMAIL.LIST" ELSE
+            STOP "CANNOT READ TRIN.GLOBAL.PARAMETER DEPLOY.EMAIL.LIST"
+        END
+    END ELSE
+        DEPLOY.EMAIL.LIST=@LOGNAME
+    END
+    LIST='A':@VM:'B':@VM:'D':@VM:'F':@VM:'P':@VM:'Q':@VM:'S'
+    DESC='Archived':@VM:'Back':@VM:'Deploy':@VM:'Forward'
+    DESC:=@VM:'Promote':@VM:'Quit':@VM:'Show'
+    CUR.IDX=1
+    IDX.PAGE=36
+    EDITROW=@(0,22)
+    EXIT.FLAG=0
+    WID=35 ; MAX.ROW=18 ; MAX.COL=60 ; DISP.LEN=30
+    
+    ARCHIVE=1
+    GOSUB TOGGLE.ARCHIVE
+RETURN
+
+TOGGLE.ARCHIVE:
+    PACKAGE.LIST=""
+    IDX.LAST=0
+    IF ARCHIVE=1 THEN
+        DESC<1,1>="Archived"
+        ARCHIVE=0
+        E=\SELECT PACKAGE WITH @ID = "[.tar" AND WITH @ID # "_]"\
+    END ELSE
+        DESC<1,1>="Active  "
+        ARCHIVE=1
+        E=\SELECT PACKAGE WITH @ID = "_]" AND WITH @ID = "[.tar"\
+    END
+    * Get the list of packages
+    EXECUTE E
+    IF @SYSTEM.RETURN.CODE = 0 THEN RETURN
+    LOOP
+        READNEXT ID ELSE EXIT
+        PACKAGE.LIST<-1>=ID
+    REPEAT
+    IF PACKAGE.LIST="" THEN STOP "No packages found"
+    IDX.LAST=DCOUNT(PACKAGE.LIST,@AM)
+RETURN
