@@ -1,0 +1,209 @@
+***************************************************************************
+* Program: COPY.INV.PARAM
+* Author : MCGOWI96
+* Date   : 04/14/2015
+* Checkin: $Id: $
+* Comment: Copy invoice parameters, potentially to another account
+***************************************************************************
+INCLUDE BP.DEV SCREEN.VARS
+
+OPEN "VOC" TO VOC ELSE STOP 201,"VOC"
+OPEN "PARAMETER" TO PARAMETER ELSE STOP 201,"PARAMETER"
+OPEN "LS.INVOICE.FORMAT" TO LS.INVOICE.FORMAT ELSE STOP 201,"LS.INVOICE.FORMAT"
+OPEN "DICT","LS.MASTER" TO D_LS.MASTER ELSE STOP 201,"DICT LS.MASTER"
+OPEN "DICT","AS.MASTER" TO D_AS.MASTER ELSE STOP 201,"DICT AS.MASTER"
+OPEN "DICT","LS.OI.CTD.INVOICE" TO D_LS.OI.CTD.INVOICE ELSE STOP 201,"DICT LS.OI.CTD.INVOICE"
+
+LOOP
+    CALL SCREEN.HDR('COPY.INV.PARAM','Copy Invoice Parameters')
+    PRINT BOTTOM:"Example: /info/MONTH.END/INVMDLTEST7_20150414_tishil49":
+    PRINT @(1,3):"Enter account to copy to: ":
+    INPUT TARGET.ACCOUNT
+    IF TARGET.ACCOUNT="/" OR TARGET.ACCOUNT="" THEN EXIT
+    GOSUB VERIFY.TARGET.ACCOUNT
+    IF NOT(OK) THEN CONTINUE
+    * If we get this far we've verified that the target account
+    * exists, and we've created QPTR's and opened the target files
+    * PARAMETER and LS.INVOICE.FORMAT
+    PRINT BOTTOM:"This template *must* exist in the current account":
+    PRINT @(1,5):"Enter source invoice template to copy (or ALL): ":
+    INPUT SOURCE
+    IF SOURCE="/" THEN EXIT
+    IF SOURCE = "" THEN CONTINUE
+    PRINT CS:
+    IF SOURCE = "ALL" THEN
+        GOSUB COPY.ALL
+    END ELSE
+        GOSUB VERIFY.SOURCE
+        IF NOT(OK) THEN CONTINUE
+        PRINT BOTTOM:"This template must *NOT* exist in the target account":
+        PRINT @(1,7):"Enter target invoice template: ":
+        INPUT TARGET
+        IF TARGET="/" THEN EXIT
+        IF TARGET="" THEN CONTINUE
+        GOSUB VERIFY.TARGET
+        IF NOT(OK) THEN CONTINUE
+        GOSUB COPY.PARAMS
+        WRITE SOURCE.REC.SETTINGS ON TARGET.PARAMETER, "SYS*INV"
+        GOSUB COPY.FIELDS
+    END
+    PRINT 'Complete - press ENTER:': ; INPUT AAA
+REPEAT
+STOP
+
+COPY.ALL:
+    SELECT LS.INVOICE.FORMAT
+    LOOP
+        READNEXT SOURCE ELSE EXIT
+        TARGET=SOURCE
+        GOSUB VERIFY.SOURCE
+        IF NOT(OK) THEN CONTINUE
+        GOSUB VERIFY.TARGET
+        IF NOT(OK) THEN CONTINUE
+        GOSUB COPY.PARAMS
+    REPEAT
+    IF OK THEN
+        WRITE SOURCE.REC.SETTINGS ON TARGET.PARAMETER, "SYS*INV"
+        GOSUB COPY.FIELDS
+    END
+RETURN
+
+VERIFY.TARGET.ACCOUNT:
+    * Make sure the target exists and that LS.INVOICE.FORMAT is found
+    OK=0
+    * Create the VOC record, then check for PARAMETER first
+    QPTR="LF"
+    QPTR<-1>=TARGET.ACCOUNT:"/PARAMETER"
+    QPTR<-1>=TARGET.ACCOUNT:"/D_PARAMETER"
+    WRITE QPTR ON VOC, "COPY.INV.PARAM.QPTR1"
+    OPEN "COPY.INV.PARAM.QPTR1" TO TARGET.PARAMETER ELSE
+        PRINT "Error opening PARAMETER in that account - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    QPTR<2>=TARGET.ACCOUNT:"/LS.INVOICE.FORMAT"
+    QPTR<3>=TARGET.ACCOUNT:"/D_LS.INVOICE.FORMAT"
+    WRITE QPTR ON VOC, "COPY.INV.PARAM.QPTR2"
+    OPEN "COPY.INV.PARAM.QPTR2" TO TARGET.LS.INVOICE.FORMAT ELSE
+        PRINT "Error opening LS.INVOICE.FORMAT in that account - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    QPTR<2>=TARGET.ACCOUNT:"/LS.MASTER"
+    QPTR<3>=TARGET.ACCOUNT:"/D_LS.MASTER"
+    WRITE QPTR ON VOC, "COPY.INV.PARAM.QPTR3"
+    OPEN "DICT","COPY.INV.PARAM.QPTR3" TO TD_LS.MASTER ELSE
+        PRINT "Error opening DICT LS.MASTER in that account - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    QPTR<2>=TARGET.ACCOUNT:"/AS.MASTER"
+    QPTR<3>=TARGET.ACCOUNT:"/D_AS.MASTER"
+    WRITE QPTR ON VOC, "COPY.INV.PARAM.QPTR4"
+    OPEN "DICT","COPY.INV.PARAM.QPTR4" TO TD_AS.MASTER ELSE
+        PRINT "Error opening DICT AS.MASTER in that account - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    QPTR<2>=TARGET.ACCOUNT:"/LS.OI.CTD.INVOICE"
+    QPTR<3>=TARGET.ACCOUNT:"/D_LS.OI.CTD.INVOICE"
+    WRITE QPTR ON VOC, "COPY.INV.PARAM.QPTR5"
+    OPEN "DICT","COPY.INV.PARAM.QPTR5" TO TD_LS.OI.CTD.INVOICE ELSE
+        PRINT "Error opening DICT LS.OI.CTD.INVOICE in that account - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    OK=1
+RETURN
+
+VERIFY.SOURCE:
+    OK=0
+    READ SOURCE.REC.PARAM FROM PARAMETER, "INVOICE.FORMAT*":SOURCE ELSE
+        PRINT "Cannot read PARAMETER INVOICE.FORMAT*":SOURCE:" - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    READ SOURCE.REC.FORMAT FROM LS.INVOICE.FORMAT, SOURCE ELSE
+        PRINT "Cannot read LS.INVOICE.FORMAT ":SOURCE:" - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    READ SOURCE.REC.SETTINGS FROM PARAMETER, "SYS*INV" ELSE
+        PRINT "Cannot read PARAMETER SYS*INV - press ENTER:":
+        INPUT AAA:
+        RETURN
+    END
+    OK=1
+RETURN
+
+VERIFY.TARGET:
+    OK=0
+    IF LEN(TARGET)>5 THEN
+        PRINT ERROR:"target name must be max of 5 chars - press ENTER":
+        INPUT AAA:
+        RETURN
+    END
+    READ DUMMY FROM TARGET.PARAMETER, "INVOICE.FORMAT*":TARGET THEN
+        PRINT "TARGET ALREADY THERE! PARAMETER INVOICE.FORMAT*":TARGET
+        *INPUT AAA:
+        *RETURN
+    END
+    READ DUMMY FROM TARGET.LS.INVOICE.FORMAT, TARGET THEN
+        PRINT "TARGET ALREADY THERE! LS.INVOICE.FORMAT ":TARGET
+        *INPUT AAA:
+        *RETURN
+    END
+    * No need to check for SYS*INV, it's ok to overwrite
+    OK=1
+RETURN
+
+COPY.PARAMS:
+    PRINT "Ok to copy? (Y/N) ":
+    INPUT YORN
+    IF YORN='Y' THEN
+        WRITE SOURCE.REC.PARAM ON TARGET.PARAMETER, "INVOICE.FORMAT*":TARGET
+        WRITE SOURCE.REC.FORMAT ON TARGET.LS.INVOICE.FORMAT, TARGET
+        PRINT "Copied ":SOURCE:" to ":TARGET.ACCOUNT:"/":TARGET:
+        PRINT "Complete"
+    END ELSE
+        PRINT "Copy cancelled":
+    END
+RETURN
+
+COPY.FIELDS:
+    E=\SSELECT PARAMETER = "[.DE*]"\
+    EXECUTE E
+    LOOP
+        READNEXT ID ELSE EXIT
+        READ R FROM PARAMETER, ID THEN
+            TYP=FIELD(ID,"*",1)
+            CTR=FIELD(ID,"*",2)
+            ATB=R<1>
+            DICT=R<3>
+            IF CTR>=500 THEN
+                * User defined fields are 500+
+                PRINT ID, DICT, ATB:"=":
+                FPTR=D_LS.MASTER ; QPTR=TD_LS.MASTER
+                IF TYP = "CHRG.DE" THEN FPTR=D_LS.OI.CTD.INVOICE ; QPTR=TD_LS.OI.CTD.INVOICE
+                IF TYP = "SPLIT.DE" AND DICT=2 THEN FPTR=D_AS.MASTER ; QPTR=TD_AS.MASTER
+                IF TYP = "SPLIT.DE" AND DICT=1 THEN FPTR=D_LS.OI.CTD.INVOICE ; QPTR=TD_LS.OI.CTD.INVOICE
+                READ DICT FROM FPTR, ATB THEN
+                    PRINT "DICT OK!"
+                    READ DUMMY FROM QPTR, ATB THEN
+                        PRINT ATB:' ALREADY FOUND, SKIPPING'
+                    END ELSE
+                        WRITE DICT ON QPTR, ATB
+                    END
+                END ELSE
+                    PRINT "NO DICT!"
+                END
+                
+                READ DUMMY FROM TARGET.PARAMETER, ID THEN
+                    PRINT "PARAMETER ":ID:" exists, not copied"
+                END ELSE
+                    WRITE R ON TARGET.PARAMETER, ID
+                END
+            END
+        END
+    REPEAT
+RETURN
