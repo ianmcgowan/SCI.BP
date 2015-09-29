@@ -1,0 +1,26 @@
+SUBROUTINE CONVERT.RTF(FROM.FILE, TO.FILE, OPTIONS)
+***************************************************************************
+* Program: CONVERT.RTF
+* Author : Ian McG
+* Date   : 11/23/1999
+* Edited : 14:40:58 Nov 19 2001 By MCGOWAN
+* Comment: Convert unix from.file to rtf in to.file
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- ---------------------------------------------------------
+* 11/19/2001 IAN  Change from BP.DEV to GLOBAL.PARAMETER
+* OPTIONS
+*  1        If D, delete FROM.FILE
+
+EXECUTE "!cp /info/DEVEL/GLOBAL.PARAMETER/TEMPLATE.RTF ":TO.FILE
+EXECUTE "!cat ":FROM.FILE:" >> ":TO.FILE
+* Now fix up paragraph and page markers - this is a literal ctrl-L
+EXECUTE "!perl -i -n -e 's{^L}{\\page }g;chomp;print $_,q(\\par );' ":TO.FILE
+* Put the rtf trailer at the end
+EXECUTE "!echo \\par }} >> ":TO.FILE
+
+IF OPTIONS<1>='D' THEN
+    EXECUTE "!rm ":FROM.FILE
+END
+RETURN
+
