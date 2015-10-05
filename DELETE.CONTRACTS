@@ -1,0 +1,110 @@
+***************************************************************************
+* Program: DELETE.CONTRACTS
+* Author : mcgowan
+* Date   : 05/14/2002
+* Edited : 15:58:40 May 28 2002 By MCGOWAN
+* Comment:
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- ---------------------------------------------------------
+
+OPEN 'LS.MASTER' TO LS.MASTER ELSE ABORT
+OPEN 'DICT','LS.MASTER' TO @DICT ELSE ABORT
+OPEN 'LS.MASTER,LS.BILLING' TO LS.BILLING ELSE ABORT
+OPEN 'CS.MASTER,CS.APPLICATIONS' TO CS.APPLICATIONS ELSE ABORT
+OPEN 'CS.MASTER,CS.CONTRACTS' TO CS.CONTRACTS ELSE ABORT
+
+THIS.MONTH=OCONV(DATE(),"DY"):OCONV(DATE(),"DM")
+THIS.YEAR=OCONV(DATE(),"DY")
+
+PRINT 'This program will *DELETE* all contracts in DELETE.CONTRACTS.LIST'
+PRINT 'Are you sure (YES/N)':
+INPUT YORN
+IF YORN # 'YES' THEN STOP
+
+* Make sure there are no locks present
+PRINT 'Have all locks been cleared (Y/N)':
+INPUT YORN
+IF YORN # 'Y' THEN STOP
+
+COMO=\DELETE.CONTRACTS.\:TIME()
+EXECUTE \COMO ON \:COMO
+
+E=\GET.LIST DELETE.CONTRACTS.LIST\
+PRINT E
+EXECUTE E RTNLIST L1
+CTR=0 ; TOT.TM=0
+LOOP
+    READNEXT @ID FROM L1 ELSE EXIT
+    T1=TIME()
+    PRINT TIMEDATE():" ":@ID:" deleting ":CTR
+    GOSUB DELETE.CONTRACT
+    PRINT TIMEDATE():" ":@ID:" done"
+    T2=TIME()
+    CTR+=1
+    TM=T2-T1
+    TOT.TM+=TM
+    PRINT TM:' seconds to delete, Average: ':TOT.TM/CTR
+REPEAT
+PRINT 'Done'
+EXECUTE \COMO OFF \:COMO
+STOP
+
+DELETE.CONTRACT:
+    LESSOR=@ID[1,3]
+    SCHEDULE=@ID[5,11]
+    READ @RECORD FROM LS.MASTER, @ID ELSE ABORT
+    PORT.PURCH={UATB.PORT.PURCH}
+    NUM.OF.ASSETS={NUM.OF.ASSETS}
+    DISP.DATE={DISP.DATE}
+    LEGAL.STATUS={UATB.LEGAL.STATUS}
+    NONACC={NONACCRUAL.YES.NO}
+    CCAN={CCAN}
+
+    * 1 is for maintenance, 0 for inquiry
+    DATA 1
+    * Not sure what the next three are for
+    DATA ""
+    DATA ""
+    DATA ""
+    DATA LESSOR
+    DATA SCHEDULE
+
+    * There may be a messages prompt
+    IF LEGAL.STATUS # "" OR PORT.PURCH # "" OR NONACC = "1" THEN
+        DATA ""
+    END
+
+    * "D" for delete
+    DATA "D"
+
+    * If the contract terminated this year, there will be a GL prompt
+    IF OCONV(DISP.DATE,"DY") = THIS.YEAR THEN
+        DATA "Y"
+    END
+
+    * "Y", why yes I do want to delete
+    DATA "Y"
+    * If there are active assets there will be another question
+    IF NUM.OF.ASSETS > 0 THEN
+        PRINT "There are active assets"
+        DATA "Y"
+    END
+
+    * If this is the last contract for this cust, there will be a question
+    READ APP.REC FROM CS.APPLICATIONS, CCAN ELSE APP.REC=''
+    READ POINTER.REC FROM CS.CONTRACTS, CCAN ELSE STOP 'CANNOT READ CS.POINTERS:':CCAN
+    * The count includes active and disposed, and we need to check for apps
+    CONTRACT.COUNT=DCOUNT(POINTER.REC<1>,@VM)+DCOUNT(POINTER.REC<2>,@VM)
+    IF CONTRACT.COUNT = 1 THEN
+        IF APP.REC<1> = "" THEN
+            PRINT "This is the last contract, there are no apps"
+            DATA "Y"
+        END
+    END
+
+    * The final cut
+    DATA ""
+
+    EXECUTE \CMAINT.00\
+RETURN
