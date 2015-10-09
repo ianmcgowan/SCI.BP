@@ -1,0 +1,151 @@
+***************************************************************************
+* Program: UCI.PARSE
+* Author : Ian McGowan
+* Date   : 04/28/2005
+* Checkin: $Id: UCI.PARSE,v 1.1 2005/10/19 05:27:38 mcgowan Exp $
+* Comment: General purpose UCI parsing
+***************************************************************************
+INCLUDE BP.DEV SCREEN.VARS
+OPEN "UCIFILE" TO UCIFILE ELSE STOP 201,"UCIFILE"
+OPEN "UCIERR"  TO UCIERR  ELSE STOP 201,"UCIERR"
+OPEN "UCIRAW"  TO UCIRAW  ELSE STOP 201,"UCIRAW"
+OPEN "EXTERN.PARAM.FILE,EXTERN.LAYOUT.FILE" TO EXTERN.LAYOUT.FILE ELSE
+    STOP 201,"EXTERN.PARAM.FILE,EXTERN.LAYOUT.FILE"
+END
+OPEN "EXTERN.PARAM.FILE,EXTERN.FIXED.FILE" TO EXTERN.FIXED.FILE ELSE
+    STOP 201,"EXTERN.PARAM.FILE,EXTERN.FIXED.FILE"
+END
+OPEN "TRIN.PARAMETER" TO TRIN.PARAMETER ELSE STOP 201,"TRIN.PARAMETER"
+
+READ REQUIRED.FIELDS FROM TRIN.PARAMETER, "UCI.REQUIRED.FIELDS" ELSE
+    REQUIRED.FIELDS=""
+END
+
+DIV=STR("-",60)
+
+EXECUTE "CLEAR.FILE UCIFILE"
+EXECUTE "CLEAR.FILE UCIERR" 
+
+GOSUB SELECT.RAW.FILE
+GOSUB BUILD.UCI.MAP
+GOSUB CHECK.MAP
+GOSUB CHECK.FIXED.FIELDS
+GOSUB BUILD.UCI.RECS
+STOP
+
+SELECT.RAW.FILE:
+    * Read the raw tab delimited file
+    PRINT CS:"Choose the tab delimited data file to use"
+    CALL CHOOSE.FILE(RAW.ID, "SSELECT UCIRAW", OPTIONS)
+    READ RAW.REC FROM UCIRAW, RAW.ID ELSE STOP "CANNOT READ ":RAW.ID
+    CONVERT CHAR(9) TO @VM IN RAW.REC
+    CONVERT CHAR(13) TO "" IN RAW.REC
+    HEADER.REC=RAW.REC<1>
+    CONVERT "_" TO "." IN HEADER.REC
+    DEL RAW.REC<1>
+    FOR F=DCOUNT(RAW.REC,@AM) TO 1 STEP -1
+        L=RAW.REC<F>
+        CONVERT @VM TO "" IN L
+        IF L="" THEN
+            DEL RAW.REC<F>
+        END
+    NEXT F
+RETURN
+
+BUILD.UCI.MAP:
+    * Build a data structure to represent the UCI layout
+    PRINT CS:"Choose the layout file to use"
+    CALL .CHOOSE.FILE(LAYOUT.NAME, "SSELECT EXTERN.PARAM.FILE,EXTERN.LAYOUT.FILE", OPTIONS)
+    READ UCI.REC FROM EXTERN.LAYOUT.FILE, LAYOUT.NAME ELSE
+        STOP "CANNOT READ ":LAYOUT.NAME
+    END
+    
+    * We can override the generic required fields with ones specific to this layout
+    READ REQUIRED.FIELDS FROM TRIN.PARAMETER, "UCI.REQUIRED.FIELDS*":LAYOUT.NAME ELSE NULL
+    
+    LAYOUT=""
+    UCI.CNT=DCOUNT(UCI.REC,@AM)
+    FOR F=1 TO UCI.CNT
+        FLD=UCI.REC<F,1>
+        GRP=UCI.REC<F,2>
+        * We want to skip header sections with no items
+        IF UCI.REC<F,5>="HEADER" THEN
+            * If the last line of the record, and we're on a header,
+            * there can be no data items
+            IF F # UCI.CNT THEN
+                IF UCI.REC<F+1,5> # "HEADER" THEN
+                    LAYOUT<1,-1>="HEADER"
+                    LAYOUT<2,-1>=GRP
+                END
+            END
+        END ELSE
+            * It's just a data item, include it
+            LAYOUT<1,-1>=FLD
+            LAYOUT<2,-1>=GRP
+        END
+    NEXT F
+RETURN
+
+CHECK.MAP:
+    * Match up the header line with the map
+    FOR F=1 TO DCOUNT(HEADER.REC<1>,@VM)
+        FLD=HEADER.REC<1,F>
+        LOCATE FLD IN LAYOUT<1> SETTING POS THEN
+            HEADER.REC<2,F>=POS
+        END ELSE
+            PRINT "Warning - field: ":FLD:" in excel, not in layout"
+        END
+    NEXT F
+
+    PRINT DIV
+
+    FOR F=1 TO DCOUNT(LAYOUT<1>,@VM)
+        FLD=LAYOUT<1,F>
+        IF FLD="HEADER" THEN CONTINUE
+        
+        LOCATE FLD IN HEADER.REC<1> SETTING POS THEN
+            LAYOUT<3,F>=POS
+        END ELSE
+            LOCATE FLD IN REQUIRED.FIELDS<1> SETTING POS THEN
+                PRINT "Error - Required field: ":FLD:" in layout, not in excel"
+                STOP
+            END ELSE
+                PRINT "Warning - field: ":FLD:" in layout, not in excel"
+            END
+        END
+    NEXT F
+RETURN
+
+CHECK.FIXED.FIELDS:
+    * TODO: READ IN THE FIXED FIELDS AND MAKE SURE THEY ARE NOT
+    * PRESENT IN THE SPREADSHEET (JUST WARN?)?
+    PRINT DIV
+    READ FIX.REC FROM EXTERN.FIXED.FILE, LAYOUT.NAME ELSE FIX.REC=""
+    FOR F=1 TO DCOUNT(FIX.REC,@AM)
+        IF FIX.REC<F,4> # "" THEN
+            PRINT FIX.REC<F,1>'L#20':'=':FIX.REC<F,4>
+        END
+    NEXT F
+    STOP
+RETURN
+
+BUILD.UCI.RECS:
+    * Loop thru the tab delimited items, building UCI records
+    FOR UCI.CTR = 1 TO DCOUNT(RAW.REC,@AM)
+        L=RAW.REC<UCI.CTR>
+        * For each line in the raw file, build a new UCI rec
+        UCI.REC=""
+        FOR FLD.CTR = 1 TO DCOUNT(LAYOUT<1>,@VM)
+            FLD=LAYOUT<1,FLD.CTR>
+            GRP=LAYOUT<2,FLD.CTR>
+            POS=LAYOUT<3,FLD.CTR>
+            IF FLD="HEADER" THEN
+                UCI.REC<1,-1>=GRP
+            END ELSE
+                UCI.REC<1,-1>=L<1,POS>
+            END
+        NEXT FLD.CTR
+        CONVERT @VM TO "\" IN UCI.REC
+        *WRITE UCI.REC ON UCIFILE, LAYOUT.NAME:"_":UCI.CTR
+    NEXT UCI.CTR
+RETURN
