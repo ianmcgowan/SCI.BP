@@ -1,0 +1,32 @@
+SUBROUTINE CHOOSE.FILE(ID, SELECT, OPTION)
+***************************************************************************
+* Program: CHOOSE.FILE
+* Author : Ian McGowan
+* Date   : 04/28/2005
+* Checkin: $Id: CHOOSE.FILE,v 1.1 2005/10/19 05:29:59 mcgowan Exp $
+* Comment: Select the items in a file and choose one
+***************************************************************************
+PROMPT ""
+MAIN:
+    LOOP
+        PRINT
+        F=1 ; L=""; ID=""
+        EXECUTE SELECT CAPTURING DUMMY
+        LOOP
+            READNEXT IDD ELSE EXIT
+            PRINT F'R#3':") ":IDD
+            L<F>=IDD
+            F+=1
+        REPEAT
+        PRINT
+        PRINT "Choice: ":
+        INPUT I
+        IF I="" OR I="/" THEN EXIT
+        IF NUM(I) AND I>0 AND I<F THEN
+            ID=L<I>
+            EXIT
+        END ELSE
+            PRINT "Enter a number from 1 to ":F-1
+        END
+    REPEAT
+RETURN
