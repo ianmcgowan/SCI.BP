@@ -1,0 +1,96 @@
+***************************************************************************
+* Program: COUNT.GL.UNPOSTED
+* Author : $Author: mcgowan $
+* Date   : 12/18/2002
+* Checkin: $Id: COUNT.GL.UNPOSTED 11766 2006-05-05 23:22:04Z mcgowan $
+* Comment: 
+***************************************************************************
+*$Log: COUNT.GL.UNPOSTED,v $
+*Revision 1.8  2006/03/02 01:10:48  mcgowan
+*mcgowan:Print detail of which files have unposted journals
+*
+*Revision 1.7  2003/07/24 00:40:46  dsiroot
+*mcgowan:Do not flag new renewals unless they are active
+*
+*Revision 1.6  2003/06/05 20:46:28  dsiroot
+*mgc:added account to subj line
+*
+*Revision 1.5  2003/05/04 19:52:09  dsiroot
+*mcgowan:Print msg if no unposted found
+*
+*Revision 1.4  2003/04/18 23:55:31  dsiroot
+*mcgowan:Only send email if there are unposted items
+*
+*Revision 1.3  2002/12/31 23:44:32  dsiroot
+*mcgowan:Add @ACCOUNT to email
+*
+*Revision 1.2  2002/12/18 19:13:37  dsiroot
+*mcgowan:Format NUMUNPOSTED
+*
+*Revision 1.1  2002/12/18 17:58:02  dsiroot
+*mgc:program to count unposted gl items. gets run from
+*
+
+OUTREC=@ACCOUNT
+OUTREC<-1>="AS OF ":TIMEDATE():":"
+OUTREC<-1>=STR("=",51)
+ACTIONREC=""
+ACTIONREC<-1>="IL.GL.ACCR.ADJ"
+ACTIONREC<-1>="IL.GL.AHFS"
+ACTIONREC<-1>="IL.GL.API"
+ACTIONREC<-1>="IL.GL.ASSUMPTION"
+ACTIONREC<-1>="IL.GL.BLENDED.INCOME.ERR"
+ACTIONREC<-1>="IL.GL.BOOK.DEPR.ERR"
+ACTIONREC<-1>="IL.GL.CANCEL.DESIGN"
+ACTIONREC<-1>="IL.GL.CONT.SPLIT"
+ACTIONREC<-1>="IL.GL.CONTRACT.CHNGS"
+ACTIONREC<-1>="IL.GL.DEALER"
+ACTIONREC<-1>="IL.GL.FOREIGN.DEPR.ERR"
+ACTIONREC<-1>="IL.GL.GAIN.LOSS"
+ACTIONREC<-1>="IL.GL.HISTORY"
+ACTIONREC<-1>="IL.GL.INCOME.ERR"
+ACTIONREC<-1>="IL.GL.MISC.GAIN.LOSS"
+ACTIONREC<-1>="IL.GL.MISC.INCOME.ERR"
+ACTIONREC<-1>="IL.GL.MTD.CASH"
+ACTIONREC<-1>="IL.GL.NA.INCOME"
+ACTIONREC<-1>="IL.GL.NA.RECLASSIFY"
+ACTIONREC<-1>="IL.GL.NEW.ASSETS"
+ACTIONREC<-1>="IL.GL.NEW.BLENDED"
+ACTIONREC<-1>="IL.GL.NEW.CONTRACT"
+ACTIONREC<-1>="IL.GL.NEW.MISC"
+ACTIONREC<-1>="IL.GL.NEW.NOTE"
+ACTIONREC<-1>="IL.GL.NEW.RENEWAL"
+ACTIONREC<-1>="IL.GL.NOTE.CHNGS"
+ACTIONREC<-1>="IL.GL.NOTE.INTEREST.ERR"
+ACTIONREC<-1>="IL.GL.NOTE.MTD.CASH"
+ACTIONREC<-1>="IL.GL.NOTE.PAYOFF"
+ACTIONREC<-1>="IL.GL.PART.GAIN.LOSS"
+ACTIONREC<-1>="IL.GL.PART.MTD.CASH"
+ACTIONREC<-1>="IL.GL.PART.RESID.WD"
+ACTIONREC<-1>="IL.GL.PART.WRITEDOWN"
+ACTIONREC<-1>="IL.GL.PT.ACCR.ADJ"
+ACTIONREC<-1>="IL.GL.RESIDUAL.WRITEDOWN"
+ACTIONREC<-1>="IL.GL.TAX.DEPR.ERR"
+ACTIONREC<-1>="IL.GL.WRITEDOWN"
+
+MAXF=DCOUNT(ACTIONREC,@AM)
+
+TOT=0
+FOR J=1 TO MAXF
+  FILENAME=ACTIONREC<J>
+  IF FILENAME="IL.GL.NEW.RENEWAL" THEN
+     * Handled specially
+     EXECUTE \COUNT \:FILENAME:\ WITH F1="" AND WITH R.RENEWAL.STATUS = "A"\ CAPTURING OUTP
+  END ELSE
+     EXECUTE \COUNT \:FILENAME:\ WITH F1="" USING DICT BP.DEV\ CAPTURING OUTP
+  END
+  NUMUNPOSTED=FIELD(OUTP<3>," ",1)
+  TOT+=NUMUNPOSTED
+  OUTREC<-1>=FILENAME "L#30":NUMUNPOSTED "R#5":" unposted items"
+NEXT J
+
+IF TOT > 0 THEN
+    PRINT TOT:" unposted items found"
+END ELSE
+    PRINT "No unposted items found"
+END
