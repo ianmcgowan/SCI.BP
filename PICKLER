@@ -6,52 +6,79 @@
 * Comment: Create a self-unpacking archive for dict/data items
 ***************************************************************************
 PROMPT ''
+PRINT 'If you are pickling DICT items, make sure to CD LS.MASTER first'
 BLOB='PRINT "PICKLED by ':@LOGNAME:' on ':TIMEDATE():' in ':@ACCOUNT:'"'
 BLOB<-1>='R=""'
-BLOB<-1>=''
-LOOP
-    PRINT 'OUTPUT FILE:':
-    INPUT OUTPUT.FILE
-    IF OUTPUT.FILE='' OR OUTPUT.FILE='/' THEN STOP
-    OPEN OUTPUT.FILE TO OUT.FVAR THEN
-        EXIT
-    END ELSE
-        PRINT 'CANNOT OPEN ':OUTPUT.FILE
+S=@SENTENCE
+
+IF DCOUNT(S,' ')>1 THEN
+  OUTPUT.FILE=FIELD(S,' ',2)
+END ELSE
+  PRINT 'OUTPUT FILE:':
+  INPUT OUTPUT.FILE
+  IF OUTPUT.FILE='' OR OUTPUT.FILE='/' THEN STOP
+END
+
+OPEN OUTPUT.FILE TO OUT.FVAR ELSE
+  STOP 201,OUTPUT.FILE
+END
+
+OVERWRITE='N'
+OLD.PROG=''
+IF DCOUNT(S,' ')>2 THEN
+  OUTPUT.ITEM=FIELD(S,' ',3)
+END ELSE
+  PRINT 'OUTPUT ITEM:':
+  INPUT OUTPUT.ITEM
+  IF OUTPUT.ITEM='' OR OUTPUT.ITEM='/' THEN STOP
+END
+
+READ OLD.PROG FROM OUT.FVAR, OUTPUT.ITEM THEN
+  PRINT OUTPUT.ITEM:' exists.  Recreate?  (Y/N):':
+  INPUT OVERWRITE
+  IF OVERWRITE='/' THEN STOP
+END ELSE
+  STOP 'CANNOT READ ':OUTPUT.FILE:' ':OUTPUT.ITEM
+END
+
+IF OVERWRITE='Y' THEN
+  * Get the list of records from the existing OLD.PROG
+  SWAP "#254#" WITH @VM IN OLD.PROG ;* Yes, it's not a typo
+  FOR F=1 TO DCOUNT(OLD.PROG,@AM)
+    IF OLD.PROG<F>=\S=''\ THEN
+      * The next line is the first row of a new record, and the first
+      * two values are file name and item name
+      T=OLD.PROG<F+1>[5,99]
+      FILE=T<1,1>
+      ITEM=T<1,2>
+      PRINT FILE, ITEM
+      GOSUB ADD.ITEM
     END
-REPEAT
+  NEXT F
+  PRINT 'Add any new items as needed, or hit ENTER to pickle'
+END
 
 LOOP
-    PRINT 'OUTPUT ITEM:':
-    INPUT OUTPUT.ITEM
-    IF OUTPUT.ITEM='' OR OUTPUT.ITEM='/' THEN STOP
-    READ DUMMY FROM OUT.FVAR, OUTPUT.ITEM THEN
-        PRINT OUTPUT.ITEM:' exists.  Overwrite?  (Y/N):':
-        INPUT OVERWRITE
-        IF OVERWRITE='Y' THEN EXIT
-    END ELSE
-        EXIT
-    END
+  PRINT '(DICT) FILE ITEM:':
+  INPUT L
+  IF L='' OR L='/' THEN EXIT
+  IF FIELD(L,' ',1)='DICT' THEN
+    FILE='DICT ':FIELD(L,' ',2)
+    ITEM=FIELD(L,' ',3)
+  END ELSE
+    FILE=FIELD(L,' ',1)
+    ITEM=FIELD(L,' ',2)
+  END
+  GOSUB ADD.ITEM
 REPEAT
 
-LOOP
-    PRINT '(DICT) FILE ITEM:':
-    INPUT L
-    IF L='' OR L='/' THEN EXIT
-    IF FIELD(L,' ',1)='DICT' THEN
-        FILE='DICT ':FIELD(L,' ',2)
-        ITEM=FIELD(L,' ',3)
-    END ELSE
-        FILE=FIELD(L,' ',1)
-        ITEM=FIELD(L,' ',2)
-    END
-    GOSUB ADD.ITEM
-REPEAT
 * Write out basic code that when run will recreate the record
-BLOB<-1>=''
 BLOB<-1>='OVERWRITE=0'
+BLOB<-1>='IF FIELD(@SENTENCE," ",2)="OVERWRITE" THEN OVERWRITE=1'
 BLOB<-1>='FOR F=1 TO DCOUNT(R,@AM)'
 BLOB<-1>='  REC=R<F>'
 BLOB<-1>='  SWAP "#254#" WITH @AM IN REC'
+BLOB<-1>='  SWAP "#253#" WITH @VM IN REC'
 BLOB<-1>='  SWAP "#134#" WITH "\" IN REC'
 BLOB<-1>='  FILE=REC<1> ; DEL REC<1>'
 BLOB<-1>='  ITEM=REC<1> ; DEL REC<1>'
@@ -68,20 +95,29 @@ WRITE BLOB ON OUT.FVAR, OUTPUT.ITEM
 STOP
 
 ADD.ITEM:
-    OPEN FILE TO FVAR ELSE
-        PRINT 'Cannot open ':FILE
-        RETURN
-    END
-    READ REC FROM FVAR, ITEM ELSE
-        PRINT 'Cannot read ':FILE:' ':ITEM
-        RETURN
-    END
-    INS ITEM BEFORE REC<1>
-    INS FILE BEFORE REC<1>
-    SWAP @AM WITH '#254#' IN REC
-    IF INDEX(REC,'\',1) THEN
-        SWAP '\' WITH '#134#' IN REC
-    END
-    BLOB<-1>='R<-1>=\':REC:'\'
-    CLOSE FVAR
+  OPEN FILE TO FVAR ELSE
+    PRINT 'Cannot open ':FILE
+    RETURN
+  END
+  READ REC FROM FVAR, ITEM ELSE
+    PRINT 'Cannot read ':FILE:' ':ITEM
+    RETURN
+  END
+  INS ITEM BEFORE REC<1>
+  INS FILE BEFORE REC<1>
+  SWAP @AM WITH '#254#' IN REC
+  SWAP @VM WITH '#253#' IN REC
+  IF INDEX(REC,'\',1) THEN
+    SWAP '\' WITH '#134#' IN REC
+  END
+  BLOB<-1>=\S=''\
+  LOOP
+    T=REC[1,70]
+    BLOB<-1>='S:=\':T:'\'
+    REC=REC[71,LEN(REC)]
+  UNTIL LEN(REC)=0 DO
+  REPEAT
+  BLOB<-1>='R<-1>=S'
+  BLOB<-1>=''
+  CLOSE FVAR
 RETURN
