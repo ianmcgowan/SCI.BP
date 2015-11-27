@@ -1,0 +1,65 @@
+***************************************************************************
+* Program: DELETE.CUSTOMERS
+* Author : mcgowan
+* Date   : 05/14/2002
+* Edited : 15:58:40 May 28 2002 By MCGOWAN
+* Comment:
+***************************************************************************
+* Date       By   Desc
+* ---------- ---- ---------------------------------------------------------
+OPEN 'CS.MASTER' TO CS.MASTER ELSE ABORT
+OPEN 'CS.MASTER,CS.CONTRACTS' TO CS.CONTRACTS ELSE ABORT
+
+PRINT 'This program will *DELETE* all customers in DELETE.CUSTOMERS.LIST'
+PRINT 'Are you sure (YES/N)':
+INPUT YORN
+IF YORN # 'YES' THEN STOP
+
+* Make sure there are no locks present
+PRINT 'Have all locks been cleared (Y/N)':
+INPUT YORN
+IF YORN # 'Y' THEN STOP
+
+COMO=\DELETE.CUSTOMERS.\:TIME()
+EXECUTE \COMO ON \:COMO
+
+E=\GET.LIST DELETE.CUSTOMERS.LIST\
+PRINT E
+EXECUTE E RTNLIST L1
+CTR=0 ; TOT.TM=0
+LOOP
+    READNEXT @ID FROM L1 ELSE EXIT
+    T1=TIME()
+    PRINT TIMEDATE():" ":@ID:" deleting ":CTR
+    GOSUB DELETE.CUSTOMER
+    PRINT TIMEDATE():" ":@ID:" done"
+    T2=TIME()
+    CTR+=1
+    TM=T2-T1
+    TOT.TM+=TM
+    PRINT TM:' seconds to delete, Average: ':TOT.TM/CTR
+REPEAT
+PRINT 'Done'
+EXECUTE \COMO OFF \:COMO
+STOP
+
+DELETE.CUSTOMER:
+    CCAN=@ID
+
+    * 1 is for maintenance, 0 for inquiry
+    DATA 1
+    * Not sure what the next two are for
+    DATA "0"
+    DATA "0"
+    DATA CCAN
+
+    * "D" for delete
+    DATA "D"
+    DATA "Y"
+    DATA "Y"
+
+    * The final cut
+    DATA ""
+
+    EXECUTE \CDMAINT.00\
+RETURN
