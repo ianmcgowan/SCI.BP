@@ -5,7 +5,7 @@
 * Checkin: $Id: $
 * Comment: Copy invoice parameters, potentially to another account
 ***************************************************************************
-INCLUDE BP.DEV SCREEN.VARS
+INCLUDE SCI.BP SCREEN.VARS
 
 OPEN "VOC" TO VOC ELSE STOP 201,"VOC"
 OPEN "PARAMETER" TO PARAMETER ELSE STOP 201,"PARAMETER"

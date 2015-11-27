@@ -12,7 +12,11 @@
 * 11/18/1998 IAN   Search for lower, proper case as well as upper
 * 03/23/1999 IAN   Fixed matt's implementation of ESEARCH
 
-$INCLUDE BAL.EXPORT SCREEN.VARS
+EOL=@(-4) ; EOS=@(-3)
+BOTTOM=@(0,23):EOL
+ERROR=BOTTOM:CHAR(7)
+PROMPT ''
+
 FILE = FIELD(@SENTENCE," ",2)
 ICTR=3
 IF FILE='DICT' THEN
@@ -36,7 +40,7 @@ FIRST.LINE=5 ; MAX.LINE=20
 PAGE.LEN=MAX.LINE-FIRST.LINE
 
 LOOP
-   CALL SCREEN.HDR(PROG,PROG.DESC)
+   PRINT @(-1):PROG'L#30':PROG.DESC
 
    IF SSTR = "" THEN
       PRINT ; PRINT "Enter search string: ": ; INPUT SSTR
@@ -81,8 +85,8 @@ LOOP
        PRINT "PRESS ENTER TO CONT": ; INPUT TEST
        STOP
    END
-   LIST='B':VM:'E':VM:'F':VM:'N':VM:'S':VM:'Q'
-   DESC='Back':VM:'Edit':VM:'Forward':VM:'New':VM:'Save':VM:'Quit'
+   LIST='B':@VM:'E':@VM:'F':@VM:'N':@VM:'S':@VM:'Q'
+   DESC='Back':@VM:'Edit':@VM:'Forward':@VM:'New':@VM:'Save':@VM:'Quit'
    LINE.CTR=FIRST.LINE ; IDX=1
 
    NEW.SEARCH=0
@@ -112,7 +116,7 @@ OPTIONS:
          IDX-=PAGE.LEN*2 ; IF IDX<1 THEN IDX=1
       CASE OPT = "N"
          SSTR=""
-         NEW.SEARCH=TRUE
+         NEW.SEARCH=1
       CASE OPT = "S"
          SELECT FOUND.SET TO SL
          PRINT 'SAVE.LIST ':UPCASE(@LOGNAME)
@@ -126,7 +130,7 @@ OPTIONS:
 RETURN
 
 PAINT:
-   CALL SCREEN.HDR(PROG,PROG.DESC)
+   PRINT @(-1):PROG'L#30':PROG.DESC
    PRINT @(0,FIRST.LINE-2):\SEARCHING FOR "\:SSTR:\" IN \:FILE:\ - \:
    PRINT HIT.CTR:" Items found":
 RETURN

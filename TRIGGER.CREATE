@@ -1,5 +1,5 @@
 ***************************************************************************
-* Program: TRIN.TRIGGER.CREATE
+* Program: TRIGGER.CREATE
 * Author : Ian McGowan
 * Date   : 2015-07-09
 * Checkin: $*Id: $
@@ -9,7 +9,7 @@
 EXECUTE "!hostname" CAPTURING HOSTNAME
 HOSTNAME = HOSTNAME<1>
 IF HOSTNAME[1,2] # "xt" THEN
-    PRINT 'This program cannot be run in PROD, please run on a test box'
+  PRINT 'This program cannot be run in PROD, please run on a test box'
 END
 
 PRINT 'This will create triggers on *ALL THE FILES*!!!'
@@ -18,53 +18,55 @@ PRINT 'Continue? (Y/N=CR): ':
 INPUT YORN
 IF YORN # 'Y' THEN STOP
 
-OPEN 'TRIN.TRIGGER.LOGFILE' TO F ELSE
-    EXECUTE \CREATE.FILE TRIN.TRIGGER.LOGFILE 2371,1\
-    EXECUTE \TRIGGER.ATB\
+OPEN 'TRIGGER.LOGFILE' TO F ELSE
+  EXECUTE \CREATE.FILE TRIGGER.LOGFILE 2371,1\
+  EXECUTE \TRIGGER.ATB\
 END
 OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
 READ EXCLUDES FROM VOC, 'TRIGGER.EXCLUDES' ELSE EXCLUDES=''
 OPEN 'DATABASE.FILES,IL' TO IL ELSE STOP 201,'DATABASE.FILES,IL'
 
+CTR=0
 SELECT IL
 LOOP
-    READNEXT ID ELSE EXIT
-    READ FILE.REC FROM VOC, FIELD(ID,',',1) ELSE CONTINUE ;* No point without a VOC entry
-    FILE.TYPE=FILE.REC<1>
-    FILE.LOC=FILE.REC<2>
-    IF FILE.LOC[1,1]='/' THEN CONTINUE ;* Only triggers on local files, no absolute paths
-    IF FILE.TYPE='DIR' OR FILE.TYPE='LD' THEN CONTINUE ;* Only hashed files get a trigger
-    OPEN ID TO F ELSE CONTINUE ;* If we can't open it, not much use having a trigger
-    CLOSE F
-    PRINT ID
-
-    * Make sure all triggers are removed (even ones on the exclude list, if they exist)
-    E=\DELETE.TRIGGER \:ID:\ UPDATE\
-    PRINT '',E
-    EXECUTE E
-    E=\DELETE.TRIGGER \:ID:\ DELETE\
-    PRINT '',E
-    EXECUTE E
-
-    * Don't create triggers on the excludes list
-    LOCATE ID IN EXCLUDES SETTING POS THEN CONTINUE
-
-    * Create the trigger
-    E=\CREATE.TRIGGER \:ID:\ TRIN.TRIGGER.LOG UPDATE\
-    PRINT '',E
-    EXECUTE E
-    E=\CREATE.TRIGGER \:ID:\ TRIN.TRIGGER.LOG.DEL DELETE\
-    PRINT '',E
-    EXECUTE E
-
-    * Make sure it worked
-    E=\LIST.TRIGGER \:ID
-    PRINT '',E
-    EXECUTE E CAPTURING OUTPUT
-    IF DCOUNT(OUTPUT,@AM) # 3 OR INDEX(OUTPUT<1>,'not defined',1) # 0 OR INDEX(OUTPUT<2>,'not defined',1) # 0 THEN
-        PRINT 'TRIGGER CREATION FAILED? PRESS ENTER:':
-        INPUT AAA
-    END
+  READNEXT ID ELSE EXIT
+  READ FILE.REC FROM VOC, FIELD(ID,',',1) ELSE CONTINUE ;* No point without a VOC entry
+  FILE.TYPE=FILE.REC<1>
+  FILE.LOC=FILE.REC<2>
+  IF FILE.LOC[1,1]='/' THEN CONTINUE ;* Only triggers on local files, no absolute paths
+  IF FILE.TYPE='DIR' OR FILE.TYPE='LD' THEN CONTINUE ;* Only hashed files get a trigger
+  OPEN ID TO F ELSE CONTINUE ;* If we can't open it, not much use having a trigger
+  CLOSE F
+  PRINT ID
+  
+  * Make sure all triggers are removed (even ones on the exclude list, if they exist)
+  E=\DELETE.TRIGGER \:ID:\ UPDATE\
+  PRINT '',E
+  EXECUTE E
+  E=\DELETE.TRIGGER \:ID:\ DELETE\
+  PRINT '',E
+  EXECUTE E
+  
+  * Don't create triggers on the excludes list
+  LOCATE ID IN EXCLUDES<1> SETTING POS THEN CONTINUE
+  
+  * Create the trigger
+  E=\CREATE.TRIGGER \:ID:\ TRIGGER.LOG UPDATE\
+  PRINT '',E
+  EXECUTE E
+  E=\CREATE.TRIGGER \:ID:\ TRIGGER.LOG.DEL DELETE\
+  PRINT '',E
+  EXECUTE E
+  
+  * Make sure it worked
+  E=\LIST.TRIGGER \:ID
+  PRINT '',E
+  EXECUTE E CAPTURING OUTPUT
+  IF DCOUNT(OUTPUT,@AM) # 5 OR INDEX(OUTPUT<1>,'not defined',1) # 0 OR INDEX(OUTPUT<2>,'not defined',1) # 0 THEN
+    PRINT 'TRIGGER CREATION FAILED? PRESS ENTER:':
+    INPUT AAA
+  END
+  CTR+=1
 REPEAT
-PRINT 'DONE'
+PRINT CTR:' TRIGGERS CREATED'
 STOP

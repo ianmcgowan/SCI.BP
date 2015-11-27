@@ -1,6 +1,6 @@
-SUBROUTINE TRIN.TRIGGER.LOG.DEL(EXEC.STAT, DICT.FLAG, FILENAME, ID)
+SUBROUTINE TRIGGER.LOG.DEL(EXEC.STAT, DICT.FLAG, FILENAME, ID)
 ***************************************************************************
-* Program: TRIN.TRIGGER.LOG.DEL
+* Program: TRIGGER.LOG.DEL
 * Author : Ian McGowan
 * Date   : 2015-07-09
 * Checkin: $Id: $
@@ -8,8 +8,8 @@ SUBROUTINE TRIN.TRIGGER.LOG.DEL(EXEC.STAT, DICT.FLAG, FILENAME, ID)
 ***************************************************************************
 * $Log: $
 EXEC.STAT=1 ;* 0=Not allowed, 1=allowed
-IF FILENAME='TRIN.TRIGGER.LOGFILE' THEN RETURN ;* Don't want recursive triggers
-OPEN 'TRIN.TRIGGER.LOGFILE' TO LOG ELSE RETURN
+IF FILENAME='TRIGGER.LOGFILE' THEN RETURN ;* Don't want recursive triggers
+OPEN 'TRIGGER.LOGFILE' TO LOG ELSE RETURN
 SAFE.ID=ID
 CONVERT '*' TO '_' IN SAFE.ID ;* A * in the ID messes things up
 * Deleting a record, don't log all fields (for now)

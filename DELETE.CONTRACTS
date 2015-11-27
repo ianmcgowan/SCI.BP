@@ -11,7 +11,7 @@
 OPEN 'LS.MASTER' TO LS.MASTER ELSE ABORT
 OPEN 'DICT','LS.MASTER' TO @DICT ELSE ABORT
 OPEN 'LS.MASTER,LS.BILLING' TO LS.BILLING ELSE ABORT
-OPEN 'CS.MASTER,CS.APPLICATIONS' TO CS.APPLICATIONS ELSE ABORT
+*OPEN 'CS.MASTER,CS.APPLICATIONS' TO CS.APPLICATIONS ELSE ABORT
 OPEN 'CS.MASTER,CS.CONTRACTS' TO CS.CONTRACTS ELSE ABORT
 
 THIS.MONTH=OCONV(DATE(),"DY"):OCONV(DATE(),"DM")
@@ -27,6 +27,8 @@ PRINT 'Have all locks been cleared (Y/N)':
 INPUT YORN
 IF YORN # 'Y' THEN STOP
 
+* If we bombed last time, close the como
+EXECUTE \COMO OFF\
 COMO=\DELETE.CONTRACTS.\:TIME()
 EXECUTE \COMO ON \:COMO
 
@@ -59,7 +61,7 @@ DELETE.CONTRACT:
     DISP.DATE={DISP.DATE}
     LEGAL.STATUS={UATB.LEGAL.STATUS}
     NONACC={NONACCRUAL.YES.NO}
-    CCAN={CCAN}
+    CCAN={CUST.CREDIT.ACCT}
 
     * 1 is for maintenance, 0 for inquiry
     DATA 1
@@ -67,7 +69,7 @@ DELETE.CONTRACT:
     DATA ""
     DATA ""
     DATA ""
-    DATA LESSOR
+    *DATA LESSOR
     DATA SCHEDULE
 
     * There may be a messages prompt
@@ -92,15 +94,15 @@ DELETE.CONTRACT:
     END
 
     * If this is the last contract for this cust, there will be a question
-    READ APP.REC FROM CS.APPLICATIONS, CCAN ELSE APP.REC=''
+    *READ APP.REC FROM CS.APPLICATIONS, CCAN ELSE APP.REC=''
     READ POINTER.REC FROM CS.CONTRACTS, CCAN ELSE STOP 'CANNOT READ CS.POINTERS:':CCAN
     * The count includes active and disposed, and we need to check for apps
     CONTRACT.COUNT=DCOUNT(POINTER.REC<1>,@VM)+DCOUNT(POINTER.REC<2>,@VM)
     IF CONTRACT.COUNT = 1 THEN
-        IF APP.REC<1> = "" THEN
+        *IF APP.REC<1> = "" THEN
             PRINT "This is the last contract, there are no apps"
             DATA "Y"
-        END
+        *END
     END
 
     * The final cut
