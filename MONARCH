@@ -1,0 +1,40 @@
+***************************************************************************
+* Program: SCI.MONARCH
+* Author : Ian McGowan
+* Date   : 02/11/2003
+* Checkin: $Id: SCI.MONARCH,v 1.3 2005/02/08 18:32:48 dsiroot Exp $
+* Comment: Wrapper to use perl scripts to parse fixed format files
+***************************************************************************
+PRINT @(-1):"SCI.MONARCH","Parse a text file"
+
+OPEN "SCI.MODELS" TO MODELS ELSE STOP 201,"SCI.MODELS"
+OPEN "_HOLD_" TO HOLD ELSE STOP 201,"_HOLD_"
+
+PRINT "Select the model to use"
+PRINT "-----------------------"
+CTR=1
+MODELS=""
+EXECUTE \SSELECT SCI.MODELS\ CAPTURING DUMMY
+LOOP
+  READNEXT ID ELSE EXIT
+  PRINT CTR 'R%2':') ':ID
+  MODELS<1,-1>=ID
+  CTR+=1
+REPEAT
+INPUT MODEL
+IF MODEL="/" OR MODEL="" THEN STOP
+
+PRINT \Enter the hold entry ID to parse (Include "P_" if needed)\
+PRINT \---------------------------------------------------------\
+INPUT HOLD
+IF HOLD="/" OR HOLD="" THEN STOP
+
+E=\!perl /info/COMMON/SCI.MODELS/\:MODELS<1,MODEL>
+E:=\ < ./_HOLD_/\:HOLD
+E:=\ > ./_HOLD_/\:HOLD:\.XLS\
+PRINT E
+EXECUTE E
+
+E=\SCI.MAIL.FILE ./_HOLD_/\:HOLD:\.XLS \:MAIL:\ /A\
+PRINT E
+EXECUTE E
