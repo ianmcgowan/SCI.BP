@@ -5,9 +5,17 @@
 * Checkin: $Id: SCI.MONARCH,v 1.3 2005/02/08 18:32:48 dsiroot Exp $
 * Comment: Wrapper to use perl scripts to parse fixed format files
 ***************************************************************************
-PRINT @(-1):"SCI.MONARCH","Parse a text file"
-
-OPEN "SCI.MODELS" TO MODELS ELSE STOP 201,"SCI.MODELS"
+PROMPT ''
+PRINT @(-1):"MONARCH","Parse a text file"
+*
+OPEN "SCI.MODELS" TO MODELS ELSE
+  R='DIR'
+  R<-1>='/info/se_custom/SCI.MODELS'
+  R<-1>='D_VOC'
+  OPEN 'VOC' TO VOC.F ELSE STOP 201,'VOC'
+  WRITE R ON VOC.F, 'SCI.MODELS'
+  OPEN 'SCI.MODELS' TO MODELS ELSE STOP 201,"SCI.MODELS"
+END
 OPEN "_HOLD_" TO HOLD ELSE STOP 201,"_HOLD_"
 
 PRINT "Select the model to use"
@@ -17,24 +25,33 @@ MODELS=""
 EXECUTE \SSELECT SCI.MODELS\ CAPTURING DUMMY
 LOOP
   READNEXT ID ELSE EXIT
-  PRINT CTR 'R%2':') ':ID
+  PRINT CTR 'R#2':') ':ID
   MODELS<1,-1>=ID
   CTR+=1
 REPEAT
+PRINT
+PRINT 'Enter the # of the model to use:':
 INPUT MODEL
 IF MODEL="/" OR MODEL="" THEN STOP
-
-PRINT \Enter the hold entry ID to parse (Include "P_" if needed)\
-PRINT \---------------------------------------------------------\
+*
+PRINT 
+PRINT 'Enter HOLD entry:':
 INPUT HOLD
 IF HOLD="/" OR HOLD="" THEN STOP
-
-E=\!perl /info/COMMON/SCI.MODELS/\:MODELS<1,MODEL>
+IF HOLD[1,2] # 'P_' THEN HOLD='P_':HOLD
+*
+FILE='./_HOLD_/':HOLD:'.XLS'
+E=\!perl /info/se_custom/SCI.MODELS/\:MODELS<1,MODEL>
 E:=\ < ./_HOLD_/\:HOLD
-E:=\ > ./_HOLD_/\:HOLD:\.XLS\
+E:=\ > \:FILE
 PRINT E
 EXECUTE E
-
-E=\SCI.MAIL.FILE ./_HOLD_/\:HOLD:\.XLS \:MAIL:\ /A\
-PRINT E
-EXECUTE E
+*
+OPTIONS=1
+BODY='Please find your report attached.  Have a nice day'
+PRINT 'Enter the email address to send to:':
+INPUT SEND.TO
+CALL SEND.ATTACHMENT(@LOGNAME, SEND.TO, 'Report:':HOLD, BODY, FILE, OPTIONS)
+*
+PRINT 'Press ENTER to return to the menu:':
+INPUT AAA

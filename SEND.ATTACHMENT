@@ -1,0 +1,23 @@
+SUBROUTINE SEND.ATTACHMENT(FROM.MAIL, TO.MAIL, SUBJECT, BODY, FILE, OPTIONS)
+***************************************************************************
+* Program: SEND.ATTACHMENT
+* Author : Ian McGowan
+* Date   : 2015-12-09
+* Checkin: $*Id: $
+* Comment: Wrapper for python alternative to uuenview
+***************************************************************************
+* $*Log: $
+DEBUG=OPTIONS<1,1>
+PARAM2=OPTIONS<1,2>
+PARAM3=OPTIONS<1,3> ;* ETC. ETC.
+
+DEBUG=1
+* Wrap all the params in quotes, just in case there are spaces or nasty chars
+E=\!/info/se_custom/SCI.BP/mail.py \
+E:=\"\:FROM.MAIL:\" \
+E:=\"\:TO.MAIL:\" \
+E:=\"\:SUBJECT:\" \
+E:=\"\:BODY:\" \
+E:=\"\:FILE:\"\
+IF DEBUG THEN PRINT E
+EXECUTE E
