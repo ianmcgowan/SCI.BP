@@ -13,7 +13,7 @@ PARAM3=OPTIONS<1,3> ;* ETC. ETC.
 
 DEBUG=1
 * Wrap all the params in quotes, just in case there are spaces or nasty chars
-E=\!/info/se_custom/SCI.BP/mail.py \
+E=\!/info/se_custom/scripts/mail.py \
 E:=\"\:FROM.MAIL:\" \
 E:=\"\:TO.MAIL:\" \
 E:=\"\:SUBJECT:\" \
