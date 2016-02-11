@@ -1,0 +1,358 @@
+***************************************************************************
+* Program: SCI.USER.MAINT
+* Author : Ian McGowan
+* Date   : 03/31/2005
+* Checkin: $Id: SCI.USER.MAINT 17118 2013-07-12 14:57:49Z stiffd01 $
+* Comment: Sane user maintenance
+***************************************************************************
+INCLUDE BP.DEV SCREEN.VARS
+
+GOSUB INIT
+EXIT.FLAG=0 ; ANS="B"
+LOOP
+    GOSUB SHOW.PAGE
+    CALL LOTUS(LIST,DESC,ANS)
+    LOCATE ANS IN LIST<1> SETTING POS THEN
+        ON POS GOSUB DO.BACK, DO.COPY, DO.DEL, DO.EDIT, DO.FORWARD, DO.MOVE, DO.PERM, DO.QUIT
+    END
+UNTIL EXIT.FLAG DO
+REPEAT
+STOP
+
+DO.BACK:
+    CUR.IDX=CUR.IDX-IDX.PAGE
+    IF CUR.IDX<1 THEN CUR.IDX=1
+RETURN
+
+DO.COPY:
+    PRINT BOTTOM:"Enter the ID to copy: ":
+    INPUT SOURCE:
+    
+    READ SOURCE.REC FROM DB.SECURITY, SOURCE ELSE
+        PRINT ERROR:SOURCE:" not on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    ORIG.SOURCE.REC=SOURCE.REC
+    
+    IF SOURCE.REC<64> # 1 THEN
+        PRINT ERROR:SOURCE:" is not a template user! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    PRINT BOTTOM:"Enter the ID to create: ":
+    INPUT TARGET:
+    
+    READ TARGET.REC FROM DB.SECURITY, TARGET THEN
+        PRINT ERROR:TARGET:" already on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    TARGET.REC=SOURCE.REC
+    TARGET.REC<5>="*"        ;* SET PASSWORD UNUSABLE
+    TARGET.REC<13>=SOURCE    ;* SET PARENT
+    TARGET.REC<15>=""        ;* SET CHILDREN
+    TARGET.REC<33>=TARGET    ;* SET U.LABEL
+    TARGET.REC<64>=0         ;* SET U.TEMPLATE
+    
+    PRINT BOTTOM:"Enter name (first last): ":
+    INPUT NAME:
+    FIRST=FIELD(NAME," ",1)
+    LAST=FIELD(NAME," ",2)
+    TARGET.REC<65>=FIRST
+    TARGET.REC<66>=LAST
+    
+    LOCATE TARGET IN SOURCE.REC<15> BY 'AL' SETTING POS THEN
+        PRINT ERROR:TARGET:" not on file, but a child of ":SOURCE:" [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    INS TARGET BEFORE SOURCE.REC<15,POS>
+    
+    * Do the writes, saving the originals safely away
+    LOG.ID=SOURCE
+    LOG.REC=ORIG.SOURCE.REC
+    GOSUB WRITE.LOG
+    
+    WRITE SOURCE.REC ON DB.SECURITY, SOURCE
+    WRITE TARGET.REC ON DB.SECURITY, TARGET
+RETURN
+
+DO.DEL:
+    PRINT BOTTOM:"Enter the ID to delete: ":
+    INPUT SOURCE:
+    
+    READ SOURCE.REC FROM DB.SECURITY, SOURCE ELSE
+        PRINT ERROR:SOURCE:" source not on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    IF SOURCE.REC<15> # "" THEN
+        PRINT ERROR:SOURCE:" has children and cannot be deleted! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    SOURCE.PARENT=SOURCE.REC<13>
+    READ PARENT.REC FROM DB.SECURITY, SOURCE.PARENT ELSE
+        PRINT ERROR:SOURCE.PARENT:" parent not on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    ORIG.PARENT.REC=PARENT.REC
+    
+    LOCATE SOURCE IN PARENT.REC<15> SETTING POS ELSE
+        PRINT ERROR:SOURCE.PARENT:" is not the parent of ":SOURCE:" [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    DEL PARENT.REC<15,POS>
+    
+    * Do the writes, saving the originals safely away
+    LOG.KEY=@LOGNAME:"*":DATE():"*":TIME():"*"
+    LOG.ID=SOURCE
+    LOG.REC=SOURCE.REC
+    GOSUB WRITE.LOG
+    LOG.ID=SOURCE.PARENT
+    LOG.REC=ORIG.PARENT.REC
+    GOSUB WRITE.LOG
+    
+    WRITE PARENT.REC ON DB.SECURITY, SOURCE.PARENT
+    DELETE DB.SECURITY, SOURCE
+
+    IF SOURCE.PARENT = MASTER.ID THEN
+        * If we're deleting a child of MASTER, refresh the list
+        CHILD.LIST=PARENT.REC<15>
+        IDX.LAST=DCOUNT(CHILD.LIST<1>,@VM)
+    END
+RETURN
+
+DO.EDIT:
+    PRINT @(0,3):EOS:"Enter the user to edit: ":
+    INPUT U
+    IF U="" OR U="/" THEN RETURN
+RETURN
+
+DO.MOVE:
+    * Be paranoid, be very paranoid...
+    PRINT BOTTOM:"Enter the ID to move to a new parent: ":
+    INPUT SOURCE:
+    
+    READ SOURCE.REC FROM DB.SECURITY, SOURCE ELSE
+        PRINT ERROR:SOURCE:" source not on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    IF SOURCE.REC<15> # "" THEN
+        PRINT ERROR:SOURCE:" has children and cannot relocate at this time! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    PRINT BOTTOM:"Enter the ID of the new parent: ":
+    INPUT TARGET:
+    
+    READ TARGET.REC FROM DB.SECURITY, TARGET ELSE
+        PRINT ERROR:TARGET:" target not on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    SOURCE.PARENT=SOURCE.REC<13>
+    READ PARENT.REC FROM DB.SECURITY, SOURCE.PARENT ELSE
+        PRINT ERROR:SOURCE.PARENT:" parent not on file! [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    * Save for the audit log
+    ORIG.SOURCE.REC = SOURCE.REC
+    ORIG.TARGET.REC = TARGET.REC
+    ORIG.PARENT.REC = PARENT.REC
+    
+    * Now down to business, change the old parent to not ref this child
+    LOCATE SOURCE IN PARENT.REC<15> SETTING POS ELSE
+        PRINT ERROR:SOURCE.PARENT:" is not the parent of ":SOURCE:" [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    DEL PARENT.REC<15,POS>
+    
+    * Now add the source to the new parents child list
+    LOCATE SOURCE IN TARGET.REC<15> BY 'AL' SETTING POS THEN
+        PRINT ERROR:SOURCE:" is alread a child of ":TARGET:" [ENTER] ":
+        INPUT AAA:
+        RETURN
+    END
+    
+    INS SOURCE BEFORE TARGET.REC<15,POS>
+    
+    * Now update the source rec to point back to the parent
+    SOURCE.REC<13>=TARGET
+    
+    * Do the writes, saving the originals safely away
+    LOG.KEY=@LOGNAME:"*":DATE():"*":TIME():"*"
+    LOG.ID=SOURCE
+    LOG.REC=ORIG.SOURCE.REC
+    GOSUB WRITE.LOG
+    LOG.ID=TARGET
+    LOG.REC=ORIG.TARGET.REC
+    GOSUB WRITE.LOG
+    LOG.ID=SOURCE.PARENT
+    LOG.REC=ORIG.PARENT.REC
+    GOSUB WRITE.LOG
+    
+    WRITE SOURCE.REC ON DB.SECURITY, SOURCE
+    WRITE TARGET.REC ON DB.SECURITY, TARGET
+    WRITE PARENT.REC ON DB.SECURITY, SOURCE.PARENT
+RETURN
+
+DO.FORWARD:
+    CUR.IDX=CUR.IDX+IDX.PAGE
+    IF CUR.IDX>IDX.LAST THEN CUR.IDX=CUR.IDX-IDX.PAGE
+RETURN
+
+DO.PERM:
+    PERM.LIST=""
+    MISC.PERM.LIST=""
+    FOR TEMPLATE.IDX=1 TO IDX.LAST
+        TEMPLATE=CHILD.LIST<1,TEMPLATE.IDX>
+        READ PARENT.REC FROM DB.SECURITY, TEMPLATE THEN
+            PARENT.MENUS=PARENT.REC<8>
+            PARENT.ACCESS=PARENT.REC<27>
+            KIDS=PARENT.REC<15>
+            PARENT.MISC.ACCESS=PARENT.REC<18>
+            FOR KID.IDX=1 TO DCOUNT(KIDS<1>,@VM)
+                KID=KIDS<1,KID.IDX>
+                READ KID.REC FROM DB.SECURITY, KID THEN
+                    KID.MENUS=KID.REC<8>
+                    KID.ACCESS=KID.REC<27>
+                    KID.MISC.ACCESS=KID.REC<18>
+                    IF KID.MENUS#PARENT.MENUS OR KID.ACCESS#PARENT.ACCESS OR KID.MISC.ACCESS#PARENT.MISC.ACCESS THEN
+                        PERM.LIST<1,-1>=TEMPLATE
+                        PERM.LIST<2,-1>=KID
+                    END
+                END
+            NEXT KID.IDX
+        END
+    NEXT TEMPLATE.IDX
+
+    IF PERM.LIST="" THEN
+        PRINT BOTTOM:"All permissions in sync: (Press ENTER): ":
+        INPUT YORN
+    END ELSE
+        PRINT @(1,2):EOS
+        FOR KID.IDX=1 TO DCOUNT(PERM.LIST<1>,@VM)
+            PRINT PERM.LIST<1,KID.IDX>'L#12':"->":PERM.LIST<2,KID.IDX>
+        NEXT KID.IDX
+        PRINT "Sync these ID's (Y/N): ":
+        INPUT YORN
+        IF YORN="Y" THEN GOSUB DO.SYNC
+    END
+RETURN
+
+DO.SYNC:
+    * We could store these values up above, but I'm a nervous nelly and
+    * worry about a stray @VM sneaking into the binary data.  Be conservative.
+    FOR KID.IDX=1 TO DCOUNT(PERM.LIST<1>,@VM)
+        TEMPLATE=PERM.LIST<1,KID.IDX>
+        KID=PERM.LIST<2,KID.IDX>
+        READ PARENT.REC FROM DB.SECURITY, TEMPLATE THEN
+            READ KID.REC FROM DB.SECURITY, KID THEN
+                LOG.ID=KID
+                LOG.REC=KID.REC
+                GOSUB WRITE.LOG
+                KID.REC<8>=PARENT.REC<8>
+                KID.REC<18>=PARENT.REC<18>
+                KID.REC<27>=PARENT.REC<27>
+                WRITE KID.REC ON DB.SECURITY, KID
+            END
+        END
+    NEXT KID.IDX
+RETURN
+
+DO.QUIT:
+    EXIT.FLAG=1
+RETURN
+
+SHOW.PAGE:
+    CALL SCREEN.HDR('SCI.USER.MAINT','User Maintenance')
+    COL=1 ; ROW=1 ; IDX=CUR.IDX
+    PRINT @(1,2):EOS:
+    LOOP
+        PRINT @(COL, 2+ROW):CHILD.LIST<1,IDX>:
+        GOSUB SHOW.CHILD
+        IDX+=1
+    UNTIL IDX>IDX.LAST DO
+        ROW+=1
+        IF ROW > MAX.ROW THEN
+            COL+=WID
+            IF COL>MAX.COL THEN
+                *PRINT @(COL-WID,2+ROW):"*more*":
+                EXIT
+            END
+            ROW=1
+        END
+    REPEAT
+    * This calculates how many entries are on a page, first time thru
+    IF IDX.PAGE="" THEN IDX.PAGE=IDX-1
+RETURN
+
+SHOW.CHILD:
+    * Limited to one level - recursion is nasty
+    PARENT.ID=CHILD.LIST<1,IDX>
+    READ PARENT.REC FROM DB.SECURITY, PARENT.ID ELSE RETURN
+    KIDS=PARENT.REC<15>
+    PARENT.MENUS=PARENT.REC<8>
+    PARENT.ACCESS=PARENT.REC<27>
+    PARENT.MISC.ACCESS=PARENT.REC<18>
+    IF KIDS="" THEN RETURN
+    FOR F=1 TO DCOUNT(KIDS<1>,@VM)
+        KID=KIDS<1,F>
+        READ KID.REC FROM DB.SECURITY, KID ELSE STOP "CANNOT READ MENUS FOR ":KID:" ":PARENT.ID
+        KID.MENUS=KID.REC<8>
+        KID.ACCESS=KID.REC<27>
+        KID.MISC.ACCESS=KID.REC<18>
+        ROW+=1
+        IF ROW > MAX.ROW THEN
+            COL+=WID
+            IF COL>MAX.COL THEN
+                *PRINT @(COL-WID,2+ROW):"*more*":
+                CONTINUE
+            END
+            ROW=1
+        END
+        PRINT @(COL, 2+ROW):" >":KIDS<1,F>:
+        IF KID.MENUS # PARENT.MENUS OR KID.ACCESS # PARENT.ACCESS OR KID.MISC.ACCESS # PARENT.MISC.ACCESS THEN PRINT "*":
+    NEXT F
+RETURN
+
+WRITE.LOG:
+    LOG.KEY=@LOGNAME:"*":DATE():"*":TIME():"*":LOG.ID
+    WRITE LOG.REC ON SCI.LOG, LOG.KEY
+RETURN
+    
+INIT:
+    OPEN "INFO-SYSTEM,DB.SECURITY" TO DB.SECURITY ELSE STOP 201,"DB.SECURITY"
+    OPEN "SCI.DB.SECURITY.LOG" TO SCI.LOG ELSE
+        EXECUTE \CREATE.FILE SCI.DB.SECURITY.LOG 43\
+        OPEN "SCI.DB.SECURITY.LOG" TO SCI.LOG ELSE STOP "CANNOT CREATE SCI.DB.SECURITY.LOG"
+    END
+    READ MASTER.REC FROM DB.SECURITY, MASTER.ID ELSE STOP 401,"DB.SECURITY,MASTER"
+    CHILD.LIST=MASTER.REC<15>
+    IDX.LAST=DCOUNT(CHILD.LIST<1>,@VM)
+    ID.LIST=""
+    
+    LIST='B':@VM:'C':@VM:'D':@VM:'E':@VM:'F':@VM:'M':@VM:'P':@VM:'Q'
+    DESC='Back':@VM:'Copy':@VM:'Delete':@VM:'Edit':@VM:'Forward':@VM:'Move':@VM:'Permissions':@VM:'Quit'
+    CUR.IDX=1
+    IDX.PAGE=""
+    EDITROW=@(0,22)
+    EXIT.FLAG=0
+    WID=13 ; MAX.ROW=18 ; MAX.COL=70 ; DISP.LEN=20
+RETURN
