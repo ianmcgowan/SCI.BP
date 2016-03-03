@@ -1,0 +1,32 @@
+***************************************************************************
+* Program: FIX.WORKFILE
+* Author : Ian McGowan
+* Date   : 08/28/2015
+* Checkin: $*Id: $
+* Comment: Fix missing workfiles
+***************************************************************************
+* $*Log: $
+PRINT 'Would you like to fix missing or damaged files? (Y/N=CR): ':
+INPUT FIX
+IF FIX = 'Y' THEN FIX=1 ELSE FIX=0
+
+FOR F=1 TO 150
+    FILE='CUST.WORKFILE':F
+    PRINT FILE
+    OPEN FILE TO FVAR THEN
+        PRINT '  ->Opens'
+        CLOSE FVAR
+    END ELSE
+        PRINT '  ->Cannot open'
+        IF FIX THEN
+            * Attempt create
+            EXECUTE \CREATE.FILE MULTIFILE \:FILE:\ 47,1\
+            OPEN FILE TO FVAR THEN
+                PRINT '   ->Created'
+            END ELSE
+                PRINT '   ->Cannot create'
+                * Delete now?
+            END
+        END
+    END
+NEXT F
