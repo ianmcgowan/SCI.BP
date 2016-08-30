@@ -1,0 +1,15 @@
+***************************************************************************
+* Program: ILBPI
+* Author : Ian McGowan
+* Date   : 2016-08-29
+* Checkin: $*Id: $
+* Comment: Edit the BPI for a given file
+***************************************************************************
+FILE=FIELD(@SENTENCE,' ',2)
+IF FILE='' THEN STOP 'Usage: ILBPI <name of infolease file>'
+OPEN 'DATABASE.FILES,IL' TO IL ELSE STOP 201,'DATABASE.FILES,IL'
+READV BPI FROM IL, FILE, 14 ELSE STOP 401,'DATABASE.FILES,IL',FILE
+PRINT BPI
+N=DCOUNT(BPI,' ')
+BPI=FIELD(BPI,' ',N-1)
+EXECUTE \AE IL.BPI \:BPI
