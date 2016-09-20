@@ -4,7 +4,7 @@ SUBROUTINE API.RP.INC.EXP(IN.XML,FILLER,RESPONSE.XML)
 * Author : Ian McGowan
 * Date   : 01/14/2014
 * Checkin: $*Id: $
-* Comment: Calculate custom indirect Related Party exposure for BOTW
+* Comment: Calculate custom indirect Related Party exposure
 ****************************************************************************
 *IN.XML='<CCAN>51992</CCAN><RPCCAN>7822,7822,7822,ETC...</RPCCAN>'
 $INCLUDE IL.BP,INCLUDE STANDARD.VARS
