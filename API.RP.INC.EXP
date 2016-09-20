@@ -1,7 +1,7 @@
 SUBROUTINE API.RP.INC.EXP(IN.XML,FILLER,RESPONSE.XML)
 ***************************************************************************
 * Program: TRIN.API.RP.INC.EXP
-* Author : Jared Knisley
+* Author : Ian McGowan
 * Date   : 01/14/2014
 * Checkin: $*Id: $
 * Comment: Calculate custom indirect Related Party exposure for BOTW
