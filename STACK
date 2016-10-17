@@ -2,7 +2,7 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Edited : $Id: STACK 17349 2014-09-08 19:58:43Z mcgowi96 $
+* Edited : $Id: STACK 17456 2015-03-17 00:01:47Z mcgowi96 $
 * Comment: Stacks TCL commands
 ***************************************************************************
 EQU NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
@@ -13,6 +13,7 @@ EQU RET TO 13,ESC TO 27,UP.KEY TO 1,DOWN.KEY TO 2
 EOL=@(-4);UP=@(-10)
 PROMPT NUL
 SEL.LIST.OUT = ""
+LIST.DETAIL=FALSE
 
 LONG.LINE = 9999
 EXECUTING = FALSE;SL.ACTIVE = FALSE
@@ -41,6 +42,7 @@ OPEN HOME.FILE TO HOME.F ELSE
 END
 OPEN 'CTLGTB' TO CTLGTB ELSE STOP 201,'CTLGTB'
 OPEN 'CTLG'   TO CTLG   ELSE STOP 201,'CTLG'
+OPEN 'TRIN.GLOBAL.PARAMETER' TO TRIN.GLOBAL.PARAMETER ELSE STOP 201,'TRIN.GLOBAL.PARAMETER'
 
 SETTINGS      = ';'        ;* DEFAULT COMMAND SEPERATOR
 SETTINGS<2>   = '.'        ;* DEFAULT STACK CHAR
@@ -53,7 +55,7 @@ SETTINGS<8>   = TRUE       ;* DEFAULT USE GET.LINE SUBR
 SETTINGS<9>   = 'BP.DEV'   ;* DEFAULT WORK FILE
 SETTINGS<10>  = FALSE      ;* DEFAULT = CONVERT TO UCASE
 SETTINGS<11>  = ""         ;* DEFAULT STARTUP COMMAND
-SETTINGS<12>  = "#R#A>"    ;* DEFAULT PROMPT
+SETTINGS<12>  = "#R#H:#A>" ;* DEFAULT PROMPT
 SETTINGS<13>  = -2         ;* DEFAULT X DISPLACEMENT FOR PROMPT
 SETTINGS<14>  = "bash"     ;* DEFAULT SHELL FOR UNIX COMMANDS
 
@@ -74,7 +76,8 @@ WORK.FILE    = SETTINGS<9>
 *MCU.ON       = SETTINGS<10>
 MCU.ON       = FALSE
 STARTUP      = SETTINGS<11>
-PROMT        = SETTINGS<12>
+*PROMT        = SETTINGS<12>
+PROMT        = "#R#H:#A>"
 X.DISP       = SETTINGS<13>
 WRITE SETTINGS ON HOME.F, SETTING.ITEM
 
@@ -88,14 +91,14 @@ OLD.X.DISP=X.DISP
 RTN=NUL
 IF STARTUP # NUL THEN ANS=STARTUP ; GOSUB COMMAND ; STARTUP=NUL
 ANS=NUL
+GOSUB GET.MAX.COLS
 
 LOOP
     GOSUB EXPAND.PROMPT
     PRINT PROMPT.DISP:
     X = LEN(PROMPT.DISP) + X.DISP
-    ENTRY = NUL;LEN = LONG.LINE;DISP.LEN=79-X
+    ANS = NUL;LEN = LONG.LINE;DISP.LEN=MAX.COLS-X
     GOSUB GET.INPUT
-    ANS=ENTRY
     * Reread the program and command stack, since they maybe modified
     * in another session
     READ PROGRAMS FROM HOME.F, PROGRAM.ITEM ELSE PROGRAMS = NUL
@@ -104,18 +107,28 @@ LOOP
     IF RTN # ESC THEN GOSUB COMMAND
 REPEAT
 
+GET.MAX.COLS:
+    * Have to do this roundabout approach, because when we exec COLS=80 always
+    EXEC.LINE="!mktemp"; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
+    TMP=EXEC.CAP<1>
+    EXEC.LINE="!tput cols>":TMP; CAP.ACTIVE=FALSE ; GOSUB EXEC.SUB
+    EXEC.LINE="!cat ":TMP;CAP.ACTIVE=TRUE;GOSUB EXEC.SUB
+    MAX.COLS=EXEC.CAP<1>
+    EXEC.LINE="!rm ":TMP;CAP.ACTIVE=FALSE;GOSUB EXEC.SUB
+RETURN
+
 GET.INPUT:
     IF GET.LINE.FLAG THEN
-        CALL GET.LINE.STACK(X,LEN,DISP.LEN,ENTRY,RTN)
+        CALL GET.LINE.STACK(X,LEN,DISP.LEN,ANS,RTN)
     END ELSE
-        PRINT @(X):;INPUT ENTRY
+        PRINT @(X):;INPUT ANS
         RTN = RET
     END
 RETURN
 
 COMMAND:
     BEGIN CASE
-        * Map up and down arrows to .R1 and .Rn
+            * Map up and down arrows to .R1 and .Rn
         CASE RTN = UP.KEY
             ANS = '.R1'
         CASE ANS='?'
@@ -163,6 +176,8 @@ DO.COMMAND:
             GOSUB PROG.COMMAND
         CASE ANS[1,1] = BANG
             GOSUB BANG.COMMAND
+        CASE ANS[1,1] = '`'
+            GOSUB SEARCH.COMMAND
         CASE ANS = 'OFF' OR ANS = 'Q' OR ANS = 'INFO'
             GOSUB WRITE.INFO
             STOP
@@ -217,11 +232,11 @@ RETURN
 
 LIST.ONE.ALIAS:
     LOCATE AL IN ALIASES<1> BY 'AL' SETTING P ELSE PRINT AL:' not found';RETURN
-    X=0;LEN=99;DISP.LEN=30;ENTRY=ALIASES<2,P>
+    X=0;LEN=99;DISP.LEN=30;ANS=ALIASES<2,P>
     GOSUB GET.INPUT
     IF RTN = 27 THEN RETURN
-    ALIASES<2,P> = ENTRY
-    IF ENTRY = NUL THEN DEL ALIASES<1,P>;DEL ALIASES<2,P>
+    ALIASES<2,P> = ANS
+    IF ANS = NUL THEN DEL ALIASES<1,P>;DEL ALIASES<2,P>
 RETURN
 
 EXEC.SUB:
@@ -317,6 +332,8 @@ RETURN
 
 STACK.COMMAND:
     BEGIN CASE
+        CASE ANS = '.D'
+            LIST.DETAIL=NOT(LIST.DETAIL)
         CASE ANS[1,2] = '.L'
             IF ANS = '.L' THEN ANS = '.L,20'
             GOSUB GET.PARAMS
@@ -326,19 +343,26 @@ STACK.COMMAND:
             IF P2 > I THEN P2 = I
             PRINT
             FOR F = P2 TO P1 STEP -1
-                PRINT SPC:F'R#3':" ":STACK<F,4>
+                PRINT SPC:F'R#5':' ':
+                IF LIST.DETAIL THEN
+                    PRINT STACK<F,1>'L#20':' ':
+                    PRINT OCONV(STACK<F,2>,'D4/'):' ':OCONV(STACK<F,3>,'MTS'):' ':
+                END
+                PRINT STACK<F,4>
             NEXT F
         CASE ANS[1,2] = '.R' OR ANS[1,2] = '.X'
             IF STACK = NUL THEN PRINT BELL ELSE GO EDIT
+        CASE ANS[1,2] = '.E'
+            GOSUB VISUAL.EDIT
         CASE ANS = '.P'
             PRINT '#R - Return  #A - Account  #D - Date  #T - Time #P - Port'
             PRINT '#E - Escape  #L - Level    #U - User  #H - Host'
             PRINT 'Prompt':
-            X = 7;DISP.LEN = 60;ENTRY = PROMT;LEN = 99;GOSUB GET.INPUT
-            PROMT = ENTRY
+            X = 7;DISP.LEN = 60;ANS = PROMT;LEN = 99;GOSUB GET.INPUT
+            PROMT = ANS
             PRINT 'Enter the X displacement for input :':
-            ENTRY = NUL;LEN = 5;DISP.LEN = 5;X = 37;GOSUB GET.INPUT
-            X.DISP = ENTRY
+            ANS = NUL;LEN = 5;DISP.LEN = 5;X = 37;GOSUB GET.INPUT
+            X.DISP = ANS
             IF NOT(NUM(X.DISP)) THEN X.DISP = 0
             SETTINGS<12> = PROMT
             SETTINGS<13> = X.DISP
@@ -349,19 +373,18 @@ STACK.COMMAND:
             PRINT 'Ctrl-D     Delete char       Ctrl-X      Forward word'
             PRINT 'Ctrl-E     End of line       Ctrl-Z      Back word'
             PRINT 'Ctrl-F     Forward char      '
-            PRINT 'Ctrl-G     Cancel line       '
-            PRINT 'Ctrl-I     Forward word      ~xxx        Search for xxx'
-            PRINT 'Ctrl-J     Delete to end     .Lm,n       List entry m thru n'
+            PRINT 'Ctrl-G     Cancel line       ~xxx        Search for xxx'
+            PRINT 'Ctrl-I     Forward word      .Lm,n       List entry m thru n'
+            PRINT 'Ctrl-J     Delete to end     .En         Edit entry n using $EDITOR'
             PRINT 'Ctrl-M     Accept line       .Rn         Restore entry n, edit'
-            PRINT 'Ctrl-N     Next line         '
+            PRINT 'Ctrl-N     Next line         .P          Change the prompt'
             PRINT 'Ctrl-P     Previous line     Q           Quit back to TCL'
             PRINT
-            PRINT '/   List the program stack   //  List the stack with cvs status'
-            PRINT '/Nx Add a New program,'
+            PRINT '/   List the program stack'
+            PRINT '/Nx Add a New program        /H  Show the history'
             PRINT '/Ex Edit the x`th program    /WW Edit the program list'
             PRINT '/Wx VI the x`th program      /S  Sort the program stack'
             PRINT '/Bx Compile the x`th program /BR Compile and run'
-            PRINT '/CI Checkin a program to cvs /D  Show diff with cvs version'
         CASE ANS = '.U'
             IF MCU.ON THEN MCU.ON = FALSE;PRINT 'upper case off' ELSE MCU.ON = TRUE;PRINT 'UPPER CASE ON'
         CASE OTHERWISE
@@ -396,6 +419,24 @@ GET.PARAMS:
     END
 RETURN
 
+VISUAL.EDIT:
+    * Edit the specified command using $EDITOR
+    N = ANS[3,LEN.ANS]
+    IF NOT(NUM(N)) THEN PRINT 'No such line number - ':N:BELL;RETURN
+    IF N = NUL THEN N = 1
+    ANS = STACK<N,4>
+    IF ANS = "" THEN ANS = STACK<N> ;* Legacy stack commands, no timestamp
+    EXEC.LINE="!mktemp"; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
+    TMP=EXEC.CAP<1>
+    EXEC.LINE="!echo '":ANS:"'>":TMP ; CAP.ACTIVE=FALSE; GOSUB EXEC.SUB
+    EXEC.LINE="!$EDITOR ":TMP; CAP.ACTIVE=FALSE ; GOSUB EXEC.SUB
+    EXEC.LINE="!cat ":TMP;CAP.ACTIVE=TRUE;GOSUB EXEC.SUB
+    ANS=EXEC.CAP<1>
+    EXEC.LINE="!rm ":TMP;CAP.ACTIVE=FALSE;GOSUB EXEC.SUB
+    PRINT ANS
+    GOSUB DO.COMMAND
+RETURN
+
 EDIT:
     * Some of the stuff in here is redundant, repeating COMMAND
     * but to gosub command introduces re-entrancy problems
@@ -404,14 +445,14 @@ EDIT:
     IF NOT(NUM(N)) THEN PRINT 'No such line number - ':N:BELL;RETURN
     IF N = NUL THEN N = 1
     LOOP WHILE N # NUL AND STACK<N> # NUL DO
-        PRINT UP:N 'R%3':':':EOL:
-        ENTRY = STACK<N,4>
-        IF ENTRY = "" THEN ENTRY = STACK<N> ;* Legacy stack commands, no timestamp
-        X = 5;DISP.LEN = 74;LEN = LONG.LINE
-        IF ENTRY # NUL THEN
-            OLD.ENTRY = ENTRY
+        PRINT UP:N 'R#5':':':EOL:
+        ANS = STACK<N,4>
+        IF ANS = "" THEN ANS = STACK<N> ;* Legacy stack commands, no timestamp
+        X = 7;DISP.LEN = MAX.COLS-X;LEN = LONG.LINE
+        IF ANS # NUL THEN
+            OLD.ANS = ANS
             GOSUB GET.INPUT
-            ANS = ENTRY
+            ANS = ANS
         END
         BEGIN CASE
             CASE RTN = UP.KEY
@@ -431,7 +472,7 @@ EDIT:
                 IF ANS[1,1] = UNIX THEN UNIX.COMMAND=TRUE
                 IF UNIX.COMMAND THEN
                     EXECUTING = FALSE
-                    IF N = 1 AND ENTRY = OLD.ENTRY THEN EXECUTING = TRUE
+                    IF N = 1 AND ANS = OLD.ANS THEN EXECUTING = TRUE
                     GOSUB DO.COMMAND
                     N=NUL
                 END ELSE
@@ -441,7 +482,7 @@ EDIT:
                         ANS = FIELD(C.LIST,COMMAND.SEPERATOR,C.COUNT)
                     UNTIL ANS = NUL DO
                         EXECUTING = FALSE
-                        IF N = 1 AND ENTRY = OLD.ENTRY THEN EXECUTING = TRUE
+                        IF N = 1 AND ANS = OLD.ANS THEN EXECUTING = TRUE
                         GOSUB DO.COMMAND
                         C.COUNT = C.COUNT + 1
                     REPEAT
@@ -454,7 +495,7 @@ EDIT:
 RETURN
 
 BANG.COMMAND:
-    * Search the stack for a string
+    * Search the stack for a string, edit as you go
     IF SEARCH.FOR = NUL THEN SEARCH.FOR = ANS[2,LONG.LINE]
     FOUND = FALSE
     FOR F = START.WORD.SEARCH TO MAX.STACK UNTIL FOUND OR STACK<F> = NUL
@@ -466,6 +507,22 @@ BANG.COMMAND:
         GO EDIT
     END
     PRINT BELL:SEARCH.FOR:' event not found'
+RETURN
+
+SEARCH.COMMAND:
+    * Search the stack for a string, display list
+    IF SEARCH.FOR = NUL THEN SEARCH.FOR = ANS[2,LONG.LINE]
+    FOUND = FALSE
+    FOR F = 1 TO MAX.STACK
+        IF INDEX(STACK<F>,SEARCH.FOR,1) # 0 THEN
+            PRINT SPC:F'R#5':' ':
+            IF LIST.DETAIL THEN
+                PRINT STACK<F,1>'L#20':' ':
+                PRINT OCONV(STACK<F,2>,'D4/'):' ':OCONV(STACK<F,3>,'MTS'):' ':
+            END
+            PRINT STACK<F,4>
+        END
+    NEXT F
 RETURN
 
 PROG.COMMAND:
@@ -487,12 +544,12 @@ PROG.COMMAND:
             IF B.FILE # '' THEN
                 OPEN B.FILE TO F THEN
                     OPTIONS=''
-                    *CALL CVS.CHECKOUT(RTN, B.FILE, B.ITEM, OPTIONS)
+                    * CALL CVS.CHECKOUT(RTN, B.FILE, B.ITEM, OPTIONS)
                     READ DUMMY FROM F, B.ITEM ELSE
                         PRINT B.ITEM:' not found.  Use standard header? ':
                         INPUT YORN
                         IF YORN = 'Y' THEN
-                            READ HEADER FROM VOC, 'TRIN.HEADER' THEN
+                            READ HEADER FROM TRIN.GLOBAL.PARAMETER, 'TRIN.HEADER' THEN
                                 SWAP "$*" WITH "$" IN HEADER
                                 HEADER<2>=HEADER<2>[1,12]:B.ITEM
                                 HEADER<3>=HEADER<3>[1,12]:USERNAME                               
@@ -511,12 +568,12 @@ PROG.COMMAND:
             *CALL CVS.LOG(RTN, B.FILE, B.ITEM, OPTIONS)
         CASE PROG.COM = '/L'
             OPTIONS='MODIFIED'
-            X = 15;DISP.LEN=30;LEN=LONG.LINE;ENTRY=NUL
+            X = 15;DISP.LEN=MAX.COLS-X;LEN=LONG.LINE;ANS=NUL
             PRINT 'Program File :':
             GOSUB GET.INPUT
-            ANS = UPCASE(ENTRY)
+            ANS = UPCASE(ANS)
             IF RTN # 13 THEN RETURN            
-            *CALL CVS.LIST(RTN, ENTRY, OPTIONS)
+            *CALL CVS.LIST(RTN, ANS, OPTIONS)
         CASE PROG.COM = '/CI'
             * Check it in
             OPTIONS=''
@@ -591,10 +648,10 @@ COMPILE:
         END
     END
 
-    IF LEN(OPTIONS) > 1 THEN
+    IF LEN(OPTIONS) > 1 OR INDEX(OPTIONS,'D',1) # 0 THEN
         PRINT "OPTIONS=":OPTIONS
         PRINT "I do not like green eggs and ham, nor do I like"
-        PRINT "programs cataloged twice.  You must fix, Sam"
+        PRINT "programs cataloged direct or twice.  You must fix, Sam"
         RETURN
     END
 
@@ -609,6 +666,7 @@ COMPILE:
     REPEAT
 
     EXEC.LINE = 'BASIC ':B.FILE:' '
+    IF OPTIONS='G' THEN EXEC.LINE:='TO BP.OBJ '
     EXEC.LINE := B.ITEM:' -D'
     PRINT EXEC.LINE
     GOSUB EXEC.SUB
@@ -634,7 +692,6 @@ COMPILE:
             PRINT EXEC.LINE
             GOSUB EXEC.SUB
     END CASE
-
     EXEC.LINE = 'NEWPCODE'
     GOSUB EXEC.SUB
 RETURN
@@ -655,10 +712,10 @@ PARSE.PROG.COM:
 RETURN
 
 GET.PROG.NAME:
-    X = 15;DISP.LEN = 30;LEN = LONG.LINE;ENTRY = PROG
+    X = 15;DISP.LEN = MAX.COLS-X;LEN = LONG.LINE;ANS = PROG
     PRINT 'Program Name :':
     GOSUB GET.INPUT
-    ANS = UPCASE(ENTRY)
+    ANS = UPCASE(ANS)
     IF RTN # 13 THEN RETURN
     GOSUB EXPAND.ALIASES
     IF INDEX(ANS,SPC,1) THEN
@@ -695,26 +752,17 @@ PRINT.PROG.INFO:
     PRINT
     FOR F = 1 TO I
         IF PROGRAMS<F> # NUL THEN
-            CH=' '
+            STATUS='' ; FLAGS=''
             IF ANS=PROG.CHAR:PROG.CHAR THEN
                 * We want cvs status as well
                 FILE=FIELD(PROGRAMS<F>,' ',1)
                 ITEM=FIELD(PROGRAMS<F>,' ',2)
+                *CALL CVS.STATUS(R,FILE,ITEM,'')
                 R=''
-		*CALL CVS.STATUS(R,FILE,ITEM,'')
-                STATUS=R<1>
-                WORK.VER=R<2>
-                CVS.VER=R<3>
-                BEGIN CASE
-                    CASE STATUS='UPTODATE'
-                        CH='  ':WORK.VER'L#9'
-                    CASE STATUS='MODIFIED'
-                        CH='> ':WORK.VER'L#4':' ':CVS.VER'L#4'
-                    CASE 1
-                        CH='! ':SPACE(9)
-                END CASE
+                STATUS=R<1>'L#9'
+                FLAGS=R<2>'L#9'
             END
-            PRINT F 'L#5':CH:' ':PROGRAMS<F>
+            PRINT F 'L#3':' ':STATUS:' ':FLAGS:' ':PROGRAMS<F>
         END
     NEXT F
 RETURN

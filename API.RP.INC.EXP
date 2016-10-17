@@ -1,0 +1,111 @@
+SUBROUTINE API.RP.INC.EXP(IN.XML,FILLER,RESPONSE.XML)
+***************************************************************************
+* Program: TRIN.API.RP.INC.EXP
+* Author : Ian McGowan
+* Date   : 01/14/2014
+* Checkin: $*Id: $
+* Comment: Calculate custom indirect Related Party exposure
+****************************************************************************
+*IN.XML='<CCAN>51992</CCAN><RPCCAN>7822,7822,7822,ETC...</RPCCAN>'
+$INCLUDE IL.BP,INCLUDE STANDARD.VARS
+$INCLUDE IL.BPI MASTER.AMC
+$INCLUDE IL.BPI ASSOCIATIONS.DIM
+EQUATE PROGRAM.NAME TO 'TRIN.API.RP.INC.EXP'
+*
+IF @USER.TYPE=0 THEN DEBUG='PRINT' ELSE DEBUG='LOG'
+COMMON /API/ API.INIT.FLAG, ACCOUNT.PARAMS, UPDATE.FILE
+CALL TRIN.DEBUG.SUB('TRIN.API.RP.INC.EXP', IN.XML, DEBUG)
+API.INIT.FLAG = 1
+*
+TAG.VAR = 'CCAN'
+PASS.XML = IN.XML
+GOSUB PARSE.DATA
+CCAN = VALUE
+*
+TAG.VAR = 'RPCCAN'
+PASS.XML = IN.XML
+GOSUB PARSE.DATA
+RPCCAN = VALUE
+*
+IF CCAN = '' OR RPCCAN = '' THEN
+    STATUS.CODE='99'
+    ERROR.MSG="YOU MUST PASS BOTH A CCAN AND RPCCAN INPUT FIELD"
+    OUT.XML=''
+    GOSUB MAKE.RESPONSE.XML
+    RETURN
+END
+*
+CALL FILE.OPEN.OK('CS.MASTER,CS.ASSOCIATIONS',CS.ASSOCIATIONS,CS.FILE.OPEN.OK)
+CALL FILE.OPEN.OK('LS.MASTER,LS.MASTER',LS.MASTER,LS.FILE.OPEN.OK)
+IF CS.FILE.OPEN.OK AND LS.FILE.OPEN.OK THEN
+    GOSUB GET.DATA
+END ELSE
+    STATUS.CODE = '98'
+    ERROR.MSG = "ERROR OPENING CS.ASSOCIATIONS OR LS.MASTER"
+    OUT.XML=''
+    GOSUB MAKE.RESPONSE.XML
+    RETURN
+END
+*
+GOSUB MAKE.RESPONSE.XML
+RETURN
+*
+GET.DATA:
+    *Loop through each RP, and total their net investment values
+    TOT.NET.INVEST = 0
+    SEP = ','
+    NUM.RP = DCOUNT(RPCCAN,SEP)
+    CKEY.ARRAY = ''
+    IF NUM.RP > 0 THEN
+        OUT.XML='<AssocInfo>'
+        FOR NR = 1 TO NUM.RP
+            RPKEY = FIELD(RPCCAN,SEP,NR)
+            MATREAD ASSOCIATIONS FROM CS.ASSOCIATIONS,RPKEY ELSE MAT ASSOCIATIONS = ''
+            NUM.CONTS = DCOUNT(CA.RELATED.CONTRACTS,VM)
+            IF NUM.CONTS > 0 THEN
+                STATUS.CODE = '01'
+                ERROR.MSG = ''
+                *OUT.XML:='<Rp ccan="':CCAN:'" rpccan="':RPKEY:'">'
+                FOR NC = 1 TO NUM.CONTS
+                    CKEY=CA.RELATED.CONTRACTS<1,NC>
+                    READV LS.NET.INVEST FROM LS.MASTER,CKEY,LS.NET.INVEST.AMC ELSE LS.NET.INVEST = 0
+                    READV CUST.CREDIT.ACCT FROM LS.MASTER,CKEY,CUST.CREDIT.ACCT.AMC ELSE CUST.CREDIT.ACCT = 'NA'
+                    *OUT.XML:='<Contract>'
+                    *OUT.XML:='<Ccan>':CUST.CREDIT.ACCT:'</Ccan>'
+                    *OUT.XML:='<Contract>':CKEY:'</Contract>'
+                    *OUT.XML:='<Contract>':CKEY:'</Contract>'
+                    *OUT.XML:='<NetInvest>':OCONV(LS.NET.INVEST,'MD2'):'</NetInvest>'
+                    *OUT.XML:='</Contract>'
+                    *Check to make sure the contract is only added once
+                    LOCATE(CKEY,CKEY.ARRAY,1;VAR) ELSE
+                        CKEY.ARRAY<1,-1>=CKEY
+                        *Only total for the related parties
+                        IF CCAN # CUST.CREDIT.ACCT THEN
+                            TOT.NET.INVEST += LS.NET.INVEST
+                        END
+                    END
+                NEXT NC
+                *OUT.XML:='</Rp>'
+            END
+        NEXT NR
+        OUT.XML:='<RpTotalNetInvest>':OCONV(TOT.NET.INVEST,'MD2'):'</RpTotalNetInvest>'
+        OUT.XML:='</AssocInfo>'
+    END ELSE
+        OUT.XML='<AssocInfo><RpTotalNetInvest>0.00</RpTotalNetInvest></AssocInfo>'
+    END
+RETURN
+*
+PARSE.DATA:
+    S.TAG = '<':TAG.VAR:'>'
+    E.TAG = '</':TAG.VAR:'>'
+    TAG.LEN = LEN(E.TAG)
+    VALUE = ''; VALUE.STR = ''
+    CALL API.50.PARSE.STRING(S.TAG,E.TAG,TAG.LEN,1,VALUE,VALUE.STR,PASS.XML)
+RETURN
+*
+MAKE.RESPONSE.XML:
+    * Takes STATUS.CODE, ERROR.MSG, OUT.XML as parameters, returns RESPONSE.XML
+    OUT.MSG = '<MESSAGES><MESSAGE STATUS="':STATUS.CODE:'" KEYREF="">':ERROR.MSG:'</MESSAGE></MESSAGES>'
+    RESPONSE.XML = '<API_DATA>':OUT.XML:OUT.MSG:'</API_DATA>'
+    CALL TRIN.DEBUG.SUB('TRIN.API.RP.INC.EXP', RESPONSE.XML, DEBUG)
+RETURN

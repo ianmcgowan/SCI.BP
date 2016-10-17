@@ -1,0 +1,12 @@
+FOR F=1 TO 100
+  BEGIN CASE
+    CASE MOD(F,15)=0
+      PRINT "FIZZBUZZ"
+    CASE MOD(F,3)=0
+      PRINT "FIZZ"
+    CASE MOD(F,5)=0
+      PRINT "BUZZ"
+    CASE 1
+      PRINT F
+  END CASE
+NEXT F

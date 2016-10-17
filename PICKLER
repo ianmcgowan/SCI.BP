@@ -5,6 +5,7 @@
 * Checkin: $Id: $
 * Comment: Create a self-unpacking archive for dict/data items
 ***************************************************************************
+* 2016-09-24:Ian:Make it harder to lose missing items
 PROMPT ''
 PRINT 'If you are pickling DICT items, make sure to CD LS.MASTER first'
 BLOB='PRINT "PICKLED by ':@LOGNAME:' on ':TIMEDATE():' in ':@ACCOUNT:'"'
@@ -23,7 +24,6 @@ OPEN OUTPUT.FILE TO OUT.FVAR ELSE
   STOP 201,OUTPUT.FILE
 END
 
-OVERWRITE='N'
 OLD.PROG=''
 IF DCOUNT(S,' ')>2 THEN
   OUTPUT.ITEM=FIELD(S,' ',3)
@@ -33,15 +33,16 @@ END ELSE
   IF OUTPUT.ITEM='' OR OUTPUT.ITEM='/' THEN STOP
 END
 
+OVERWRITE=''
 READ OLD.PROG FROM OUT.FVAR, OUTPUT.ITEM THEN
   PRINT OUTPUT.ITEM:' exists.  Recreate?  (Y/N):':
   INPUT OVERWRITE
-  IF OVERWRITE='/' THEN STOP
+  IF OVERWRITE#'Y' THEN STOP 'Quitting'
 END
 
 IF OVERWRITE='Y' THEN
   * Get the list of records from the existing OLD.PROG
-  SWAP "#254#" WITH @VM IN OLD.PROG ;* Yes, it's not a typo
+  SWAP "#AM#" WITH @VM IN OLD.PROG ;* Yes, it's not a typo
   FOR F=1 TO DCOUNT(OLD.PROG,@AM)
     IF OLD.PROG<F>=\S=''\ THEN
       * The next line is the first row of a new record, and the first
@@ -59,7 +60,8 @@ END
 LOOP
   PRINT '(DICT) FILE ITEM:':
   INPUT L
-  IF L='' OR L='/' THEN EXIT
+  IF L='/' THEN STOP 'Quitting'
+  IF L='' THEN EXIT
   IF FIELD(L,' ',1)='DICT' THEN
     FILE='DICT ':FIELD(L,' ',2)
     ITEM=FIELD(L,' ',3)
@@ -75,8 +77,9 @@ BLOB<-1>='OVERWRITE=0'
 BLOB<-1>='IF FIELD(@SENTENCE," ",2)="OVERWRITE" THEN OVERWRITE=1'
 BLOB<-1>='FOR F=1 TO DCOUNT(R,@AM)'
 BLOB<-1>='  REC=R<F>'
-BLOB<-1>='  SWAP "#254#" WITH @AM IN REC'
-BLOB<-1>='  SWAP "#253#" WITH @VM IN REC'
+BLOB<-1>='  SWAP "#AM#" WITH @AM IN REC'
+BLOB<-1>='  SWAP "#VM#" WITH @VM IN REC'
+BLOB<-1>='  SWAP "#SVM#" WITH @SVM IN REC'
 BLOB<-1>='  SWAP "#134#" WITH "\" IN REC'
 BLOB<-1>='  FILE=REC<1> ; DEL REC<1>'
 BLOB<-1>='  ITEM=REC<1> ; DEL REC<1>'
@@ -90,7 +93,7 @@ BLOB<-1>='  IF WFLAG THEN WRITE REC ON FVAR,ITEM'
 BLOB<-1>='  CLOSE FVAR'
 BLOB<-1>='NEXT F'
 WRITE BLOB ON OUT.FVAR, OUTPUT.ITEM
-STOP
+STOP "Written"
 
 ADD.ITEM:
   OPEN FILE TO FVAR ELSE
@@ -101,10 +104,12 @@ ADD.ITEM:
     PRINT 'Cannot read ':FILE:' ':ITEM
     RETURN
   END
+  IF FILE[1,5]='DICT ' THEN DEL REC<9> ; DEL REC<8> ;* Avoid CD probs
   INS ITEM BEFORE REC<1>
   INS FILE BEFORE REC<1>
-  SWAP @AM WITH '#254#' IN REC
-  SWAP @VM WITH '#253#' IN REC
+  SWAP @AM WITH '#AM#' IN REC
+  SWAP @VM WITH '#VM#' IN REC
+  SWAP @SVM WITH '#SVM#' IN REC
   IF INDEX(REC,'\',1) THEN
     SWAP '\' WITH '#134#' IN REC
   END
