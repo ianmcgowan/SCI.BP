@@ -85,8 +85,8 @@ LOOP
        PRINT "PRESS ENTER TO CONT": ; INPUT TEST
        STOP
    END
-   LIST='B':@VM:'E':@VM:'F':@VM:'N':@VM:'S':@VM:'Q'
-   DESC='Back':@VM:'Edit':@VM:'Forward':@VM:'New':@VM:'Save':@VM:'Quit'
+   LIST='B':@VM:'E':@VM:'F':@VM:'N':@VM:'S':@VM:'W':@VM:'Q'
+   DESC='Back':@VM:'Edit':@VM:'Forward':@VM:'New':@VM:'Save':@VM:'WP':@VM:'Quit'
    LINE.CTR=FIRST.LINE ; IDX=1
 
    NEW.SEARCH=0
@@ -105,10 +105,11 @@ OPTIONS:
    BEGIN CASE
       CASE OPT='F'
          NULL
-      CASE OPT='E'
+      CASE OPT='E' OR OPT='W'
          PRINT BOTTOM:'Enter # to edit :': ; INPUT N
          IF N # '' AND N # '/' AND NUM(N) THEN
-            EXECUTE "AE ":FILE:" ":FOUND.SET<N>
+            IF OPT='E' THEN E='AE ' ELSE E='SCRED '
+            EXECUTE E:FILE:" ":FOUND.SET<N>
          END
          IDX-=PAGE.LEN ; IF IDX < 1 THEN IDX=1
          GOSUB PAINT

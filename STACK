@@ -82,8 +82,6 @@ EXEC.LINE="!hostname" ; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
 HOST.NAME=EXEC.CAP<1>
 
 READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
-ANS="STACK START"
-GOSUB UPDATE.STACK
 READ PROGRAMS FROM HOME.F, PROGRAM.ITEM ELSE PROGRAMS = NUL
 READ ALIASES FROM HOME.F, ALIAS.ITEM ELSE ALIASES = NUL
 OLD.X.DISP=X.DISP
@@ -166,8 +164,6 @@ DO.COMMAND:
         CASE ANS[1,1] = BANG
             GOSUB BANG.COMMAND
         CASE ANS = 'OFF' OR ANS = 'Q' OR ANS = 'INFO'
-            ANS="STACK QUIT"
-            GOSUB UPDATE.STACK
             GOSUB WRITE.INFO
             STOP
         CASE ANS[1,5] = 'ALIAS'
@@ -476,7 +472,6 @@ PROG.COMMAND:
     IF ANS = PROG.CHAR OR ANS=PROG.CHAR:PROG.CHAR THEN GO PRINT.PROG.INFO
     GOSUB PARSE.PROG.COM
     ANS=PROG.COM:SPC:B.FILE:SPC:B.ITEM
-    GOSUB UPDATE.STACK
     BEGIN CASE
         CASE PROG.COM = '/WW'
             WRITE PROGRAMS ON HOME.F, PROGRAM.ITEM
@@ -592,8 +587,7 @@ COMPILE:
     READ DUMMY FROM VOC, B.ITEM THEN
         IF INDEX(DUMMY<2>,'/CTLG/',1)=0 THEN
             PRINT B.ITEM:' is cataloged direct to ':DUMMY<2>
-            PRINT 'Bugging out:':INDEX(DUMMY<2>,'/CTLG/',1)
-            RETURN
+            OPTIONS:='D'
         END
     END
 
@@ -606,12 +600,12 @@ COMPILE:
 
     LOOP
     UNTIL OPTIONS#'' DO
-        PRINT 'Catalog ':B.ITEM:' -- L)ocal or G)lobal :':
+        PRINT 'Catalog ':B.ITEM:' -- D)irect, L)ocal or G)lobal :':
         INPUT OPTIONS
         OPTIONS=UPCASE(OPTIONS)
         IF OPTIONS = '/' OR OPTIONS='' THEN RETURN
         * Have to enter L or G
-        IF OPTIONS # 'L' AND OPTIONS # 'G' THEN OPTIONS=''
+        IF OPTIONS # 'L' AND OPTIONS # 'G' AND OPTIONS # 'D' THEN OPTIONS=''
     REPEAT
 
     EXEC.LINE = 'BASIC ':B.FILE:' '
@@ -619,21 +613,27 @@ COMPILE:
     PRINT EXEC.LINE
     GOSUB EXEC.SUB
 
-    IF OPTIONS='G' THEN
-        EXEC.LINE = 'CATALOG ':B.FILE:' ':B.ITEM:' FORCE'
-        PRINT EXEC.LINE
-        GOSUB EXEC.SUB
-        * Global, so remove direct or local pointers
-        READ R FROM VOC, B.ITEM THEN DELETE VOC, B.ITEM
-    END ELSE
-        EXEC.LINE = 'CATALOG ':PROG:' LOCAL FORCE'
-        PRINT EXEC.LINE
-        GOSUB EXEC.SUB
-        * Object is in CTLG file, so remove from SOURCE file
-        OPEN B.FILE TO F ELSE PRINT 'Cannot open ':B.FILE:BELL;RETURN
-        DELETE F, '_':B.ITEM
-        CLOSE F
-    END
+    * HELP CATALOG - for an overview of what these options mean
+    BEGIN CASE
+        CASE OPTIONS='G'
+            EXEC.LINE = 'CATALOG ':B.FILE:' ':B.ITEM:' FORCE'
+            PRINT EXEC.LINE
+            GOSUB EXEC.SUB
+            * Global, so remove direct or local pointers
+            READ R FROM VOC, B.ITEM THEN DELETE VOC, B.ITEM
+        CASE OPTIONS='L'
+            EXEC.LINE = 'CATALOG ':PROG:' LOCAL FORCE'
+            PRINT EXEC.LINE
+            GOSUB EXEC.SUB
+            * Object is in CTLG file, so remove from SOURCE file
+            OPEN B.FILE TO F ELSE PRINT 'Cannot open ':B.FILE:BELL;RETURN
+            DELETE F, '_':B.ITEM
+            CLOSE F
+        CASE OPTIONS='D'
+            EXEC.LINE = 'CATALOG ':B.FILE:' ':B.ITEM:' DIRECT FORCE'
+            PRINT EXEC.LINE
+            GOSUB EXEC.SUB
+    END CASE
 
     EXEC.LINE = 'NEWPCODE'
     GOSUB EXEC.SUB

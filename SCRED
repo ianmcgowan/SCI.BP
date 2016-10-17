@@ -12,6 +12,6 @@ IF REC<1>='LD' THEN
         PATH=REC<2>:'/':FIELD(REC<2>,'/',DCOUNT(REC<2>,'/'))
     END
 END
-E='!emacs ':PATH:'/':ITEM
+E='!~/joe ':PATH:'/':ITEM
 PRINT E
 EXECUTE E
