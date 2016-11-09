@@ -6,9 +6,11 @@
 * Comment: Create a self-unpacking archive for dict/data items
 ***************************************************************************
 * 2016-09-24:Ian:Make it harder to lose missing items
+* 2016-11-09:Ian:Do not remove EXECUTE lines
 PROMPT ''
 PRINT 'If you are pickling DICT items, make sure to CD LS.MASTER first'
 BLOB='PRINT "PICKLED by ':@LOGNAME:' on ':TIMEDATE():' in ':@ACCOUNT:'"'
+BLOB<-1>='SENTENCE=@SENTENCE'
 BLOB<-1>='R=""'
 S=@SENTENCE
 
@@ -44,6 +46,11 @@ IF OVERWRITE='Y' THEN
   * Get the list of records from the existing OLD.PROG
   SWAP "#AM#" WITH @VM IN OLD.PROG ;* Yes, it's not a typo
   FOR F=1 TO DCOUNT(OLD.PROG,@AM)
+    IF FIELD(OLD.PROG<F>,' ',1)='EXECUTE' OR FIELD(OLD.PROG<F>,' ',1)='STREAM' THEN
+      * Keep execute statements, useful for CREATE.FILE etc.
+      BLOB<-1>=OLD.PROG<F>
+    END
+    *
     IF OLD.PROG<F>=\S=''\ THEN
       * The next line is the first row of a new record, and the first
       * two values are file name and item name
@@ -74,7 +81,7 @@ REPEAT
 
 * Write out basic code that when run will recreate the record
 BLOB<-1>='OVERWRITE=0'
-BLOB<-1>='IF FIELD(@SENTENCE," ",2)="OVERWRITE" THEN OVERWRITE=1'
+BLOB<-1>='IF FIELD(SENTENCE," ",2)="OVERWRITE" THEN OVERWRITE=1'
 BLOB<-1>='FOR F=1 TO DCOUNT(R,@AM)'
 BLOB<-1>='  REC=R<F>'
 BLOB<-1>='  SWAP "#AM#" WITH @AM IN REC'
