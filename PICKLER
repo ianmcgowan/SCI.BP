@@ -7,10 +7,10 @@
 ***************************************************************************
 * 2016-09-24:Ian:Make it harder to lose missing items
 * 2016-11-09:Ian:Do not remove EXECUTE lines
+* 2016-11-28:Ian:Improve output file formatting
 PROMPT ''
-PRINT 'If you are pickling DICT items, make sure to CD LS.MASTER first'
 BLOB='PRINT "PICKLED by ':@LOGNAME:' on ':TIMEDATE():' in ':@ACCOUNT:'"'
-BLOB<-1>='SENTENCE=@SENTENCE'
+BLOB<-1>='SENTENCE=@SENTENCE' ;* Need this early because EXECUTE resets..
 BLOB<-1>='R=""'
 S=@SENTENCE
 
@@ -36,11 +36,7 @@ END ELSE
 END
 
 OVERWRITE=''
-READ OLD.PROG FROM OUT.FVAR, OUTPUT.ITEM THEN
-  PRINT OUTPUT.ITEM:' exists.  Recreate?  (Y/N):':
-  INPUT OVERWRITE
-  IF OVERWRITE#'Y' THEN STOP 'Quitting'
-END
+READ OLD.PROG FROM OUT.FVAR, OUTPUT.ITEM THEN OVERWRITE='Y'
 
 IF OVERWRITE='Y' THEN
   * Get the list of records from the existing OLD.PROG
@@ -128,6 +124,6 @@ ADD.ITEM:
   UNTIL LEN(REC)=0 DO
   REPEAT
   BLOB<-1>='R<-1>=S'
-  BLOB<-1>=''
+  BLOB<-1>='*'
   CLOSE FVAR
 RETURN
