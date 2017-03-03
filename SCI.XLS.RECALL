@@ -1,0 +1,243 @@
+***************************************************************************
+* Program: SCI.XLS.RECALL
+* Author : MCGOWJ01
+* Date   : 2017-02-10
+* Edited : 
+* Comment: Convert a recall into an excel sheet
+***************************************************************************
+* LOG DATE   BY           CHANGE
+* ---------- ------------ -------------------------------------------------
+* SEE: https://msdn.microsoft.com/en-us/library/aa140066(office.10).aspx
+*      https://blogs.msdn.microsoft.com/brian_jones/2005/06/27/introduction-to-excel-xml-part-1-creating-a-simple-table/
+*
+DEBUG=0
+S=@SENTENCE
+FILE.NAME=FIELD(S,' ',2)
+OPENSEQ FILE.NAME TO INPUT.F ELSE STOP 201,FILE.NAME
+OUTPUT.FILE.NAME=FILE.NAME:'.xls'
+EXECUTE '!rm -f ':OUTPUT.FILE.NAME
+EXECUTE '!touch ':OUTPUT.FILE.NAME
+OPENSEQ OUTPUT.FILE.NAME TO OUTPUT.F ELSE STOP 'CANNOT OPEN ':OUTPUT.FILE.NAME
+OPEN 'RECALLS' TO RECALLS ELSE STOP 201,'RECALLS'
+GOSUB GET.FIELD.NAMES
+IF DEBUG THEN
+  PRINT 'FIELD.MAP'
+  FOR F=1 TO DCOUNT(FIELD.MAP<1>,@VM)
+    PRINT F'R#2':' ':FIELD.MAP<6,F>'L#20':' ':FIELD.MAP<2,F>'L#35':' ':FIELD.MAP<3,F>
+  NEXT F
+END
+CONTROL.CHARS=''
+FOR CHARACTER = 127 TO 249 
+  CONTROL.CHARS:=CHAR(CHARACTER) 
+NEXT CHARACTER 
+*
+GOSUB XLS.HEADER
+ROW.COUNT=0
+LOOP
+  READSEQ ROW FROM INPUT.F ELSE EXIT
+  ROW.COUNT+=1
+  GOSUB XLS.BODY
+REPEAT
+GOSUB XLS.TOTALS
+GOSUB XLS.FOOTER
+RECIP='' ; FROM.USER='' ; CC.USER='' ;* Let the SUBR figure it out
+MSG='Please find your report attached'
+SUBJECT='REPORT:':FIELD(OUTPUT.FILE.NAME,'/',DCOUNT(OUTPUT.FILE.NAME,'/'))
+ATTACH=OUTPUT.FILE.NAME
+OPTIONS=''
+CALL SCI.MAIL.SUB(RECIP, FROM.USER, CC.USER, MSG, ATTACH, SUBJECT, OPTIONS)
+STOP
+*
+XLS.BODY:
+  L='<Row>' ; GOSUB WRITE.LINE
+  CONVERT '^' TO @VM IN ROW
+  FOR C=1 TO DCOUNT(ROW<1>,@VM)
+    L='  <Cell>'
+    CELL=ROW<1,C>
+    GOSUB URL.ENCODE.CELL
+    FORMAT=FIELD.MAP<3,C>
+    CONVERT ',' TO '' IN FORMAT  ;* MR2, excel has a hard time with commas in numbers
+    BEGIN CASE
+      CASE FORMAT[1,1]='D' AND ICONV(CELL,'D') # '' ;* Date
+        D=ICONV(CELL,'D')
+        CELL=OCONV(D,'D4Y'):'-':OCONV(D,'DM'):'-':OCONV(D,'DD')
+        *CELL:='T00:00:00.000'
+        L:='<Data ss:Type="DateTime">':CELL:'</Data>'
+      CASE FORMAT[1,2]='MD' OR FORMAT[1,2]='MR' OR (NUM(CELL) AND CELL#'') ;* Number
+        CONVERT ',' TO '' IN CELL
+        IF NUM(CELL) THEN
+          L:='<Data ss:Type="Number">':CELL:'</Data>'
+        END ELSE
+          L:='<Data ss:Type="String">':CELL:'</Data>'
+        END
+      CASE 1 ;* String is default type
+        L:='<Data ss:Type="String">':CELL:'</Data>'
+    END CASE
+    L:='</Cell>'
+    GOSUB WRITE.LINE
+  NEXT C
+  L='</Row>'
+  GOSUB WRITE.LINE
+RETURN
+*
+XLS.TOTALS:
+  L='<Row>'
+  GOSUB WRITE.LINE
+  FOR C=1 TO DCOUNT(FIELD.MAP<1>,@VM)
+    FORMAT=FIELD.MAP<3,C>
+    IF FORMAT[1,2]='MD' OR FORMAT[1,2]='MR' THEN
+      * Number col, add total to bottom row
+      L='  <Cell ss:Index="':C:'" ss:Formula="=SUM(R[-':ROW.COUNT:']C:R[-1]C)"><Data ss:Type="Number">0</Data></Cell>'
+      GOSUB WRITE.LINE
+    END
+  NEXT C
+  L='</Row>'
+  GOSUB WRITE.LINE
+RETURN
+*
+URL.ENCODE.CELL:
+  * Certain characters not allowed in XML - escape them
+  CONVERT CONTROL.CHARS TO '' IN CELL ;* Zap unicode/other code pages
+  SWAP '&' WITH '&amp;' IN CELL
+  SWAP '<' WITH '&lt;'  IN CELL
+  SWAP '>' WITH '&gt;'  IN CELL
+  CELL=TRIM(CELL);* No benefit to leading or trailing spaces
+RETURN
+*
+XLS.HEADER:
+  L='<?xml version="1.0"?>'
+  GOSUB WRITE.LINE
+  L='<?mso-application progid="Excel.Sheet"?>'
+  GOSUB WRITE.LINE
+  L='<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"'
+  L:=' xmlns:o="urn:schemas-microsoft-com:office:office"'
+  L:=' xmlns:x="urn:schemas-microsoft-com:office:excel"'
+  L:=' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"'
+  L:=' xmlns:html="http://www.w3.org/TR/REC-html40">'
+  GOSUB WRITE.LINE
+  L=' <Styles>'
+  GOSUB WRITE.LINE
+  L='  <Style ss:ID="Default" ss:Name="Normal">'
+  L:='<Alignment ss:Vertical="Bottom"/>'
+  L:='<Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>'
+  L:='</Style>'
+  GOSUB WRITE.LINE
+  L='  <Style ss:ID="s100" ss:Name="Header">'
+  L:='<Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#005100" ss:Bold="1"/>'
+  L:='<Interior ss:Color="#C6EFCE" ss:Pattern="Solid"/>'
+  L:='</Style>'
+  GOSUB WRITE.LINE
+  L='  <Style ss:ID="s101" ss:Name="Number">'
+  L:='<NumberFormat ss:Format="0.00"/>'
+  L:='</Style>'
+  GOSUB WRITE.LINE
+  L='  <Style ss:ID="s102" ss:Name="Date">'
+  L:='<NumberFormat ss:Format="Short Date"/>'
+  L:='</Style>'
+  GOSUB WRITE.LINE
+  L='  <Style ss:ID="s103" ss:Name="Integer">'
+  L:='<NumberFormat ss:Format="0"/>'
+  L:='</Style>'
+  GOSUB WRITE.LINE
+  L=' </Styles>'
+  GOSUB WRITE.LINE
+  L='  <Worksheet ss:Name="Sheet1">'
+  GOSUB WRITE.LINE
+  L='    <Table>'
+  GOSUB WRITE.LINE
+  * Column definitions
+  FOR C=1 TO DCOUNT(FIELD.MAP<1>,@VM)
+    FORMAT=FIELD.MAP<3,C>
+    MASK=FIELD.MAP<5,C>
+    MASK=MASK[1,LEN(MASK)-1]
+    IF NOT(NUM(MASK)) THEN MASK=10
+    BEGIN CASE
+      CASE FORMAT[1,1]='D'  ;* Date
+        STYLE='s102'
+      CASE FORMAT[1,2]='MD' OR FORMAT[1,2]='MR' ;* Number
+        IF FORMAT[3,1]='0' THEN
+          STYLE='s103'
+        END ELSE
+          STYLE='s101'
+        END
+      CASE 1 ;* String is default type
+        STYLE='Default'
+    END CASE
+    L='      <Column ss:Index="':C:'" ss:StyleID="':STYLE:'" ss:Width="':MASK*10:'"/>'
+    GOSUB WRITE.LINE
+  NEXT C
+  *
+  * Now write a header row
+  *
+  L='<Row>' ; GOSUB WRITE.LINE
+  FOR C=1 TO DCOUNT(FIELD.MAP<1>,@VM)
+    L='  <Cell ss:StyleID="s100">'
+    *CELL=TRIM(FIELD.MAP<4,C>)
+    *IF CELL='' THEN CELL=FIELD.MAP<6,C>
+    CELL=FIELD.MAP<6,C>
+    GOSUB URL.ENCODE.CELL
+    L:='<Data ss:Type="String">':CELL:'</Data></Cell>'
+    GOSUB WRITE.LINE
+  NEXT C
+  L='</Row>'
+  GOSUB WRITE.LINE
+RETURN
+*
+XLS.FOOTER:
+  L='    </Table>'
+  GOSUB WRITE.LINE
+  L='  </Worksheet>'
+  GOSUB WRITE.LINE
+  L='</Workbook>'
+  GOSUB WRITE.LINE
+RETURN
+*
+WRITE.LINE:
+  *IF DEBUG THEN PRINT L
+  WRITESEQ L:CHAR(13) APPEND ON OUTPUT.F ELSE STOP 'ERROR WRITING ':FILE.NAME
+RETURN
+*
+GET.FIELD.NAMES:
+  FIELD.MAP=''
+  RECALL.NAME=FIELD(FILE.NAME,'/',DCOUNT(FILE.NAME,'/'))
+  READV R FROM RECALLS, RECALL.NAME, 1 ELSE STOP 'CANNOT READ RECALLS:':RECALL.NAME
+  DATA.FILE=''
+  FOR F=1 TO DCOUNT(R,@VM)
+    L=R<1,F>
+    IF FIELD(L,' ',1) = 'list' OR FIELD(L,' ',1) = 'sort' THEN
+      IF DATA.FILE # '' THEN STOP 'CAN ONLY PROCESS ONE list OR sort PER RECALL'
+      DATA.FILE=FIELD(L,' ',2)
+      OPEN 'DICT',DATA.FILE TO DICT ELSE STOP 'CANNOT OPEN DICT ':DATA.FILE
+    END
+    IF DATA.FILE # '' THEN
+      FOR WC=1 TO DCOUNT(L,' ')
+        * list LS.MASTER FIELD1 FIELD2 ETC..  Skip the first two
+        ATB=FIELD(L,' ',WC)
+        IF ATB='list' OR ATB='sort' THEN CONTINUE
+        IF ATB=DATA.FILE THEN CONTINUE
+        IF ATB='TO' THEN
+           * Stop when we get to the TO DELIM etc...
+           RETURN
+        END
+        READ DICT.REC FROM DICT, ATB THEN
+          TYPE=DICT.REC<1>
+          CORR=DICT.REC<2>
+          CONV=DICT.REC<3>
+          HEAD=DICT.REC<4>
+          MASK=DICT.REC<5>
+          N=DCOUNT(FIELD.MAP<1>,@VM)+1 ;* Always nervous of NULL with <1,-1>
+          FIELD.MAP<1,N>=TYPE
+          FIELD.MAP<2,N>=CORR
+          FIELD.MAP<3,N>=CONV
+          FIELD.MAP<4,N>=HEAD
+          FIELD.MAP<5,N>=MASK
+          FIELD.MAP<6,N>=ATB
+        END ELSE
+          IF ATB # 'BY' AND ATB # 'WITH' THEN
+            PRINT 'ATB ':ATB:' NOT FOUND IN DICT ':DATA.FILE
+          END
+        END
+      NEXT WC
+    END
+  NEXT F
+RETURN
