@@ -6,9 +6,12 @@
 * Comment: Create a self-unpacking archive for dict/data items
 ***************************************************************************
 * 2016-09-24:Ian:Make it harder to lose missing items
+* 2016-11-09:Ian:Do not remove EXECUTE lines
+* 2016-11-28:Ian:Improve output file formatting
+* 2016-12-07:Ian:Sort list of files/items before writing
 PROMPT ''
-PRINT 'If you are pickling DICT items, make sure to CD LS.MASTER first'
 BLOB='PRINT "PICKLED by ':@LOGNAME:' on ':TIMEDATE():' in ':@ACCOUNT:'"'
+BLOB<-1>='SENTENCE=@SENTENCE' ;* Need this early because EXECUTE resets..
 BLOB<-1>='R=""'
 S=@SENTENCE
 
@@ -33,28 +36,32 @@ END ELSE
   IF OUTPUT.ITEM='' OR OUTPUT.ITEM='/' THEN STOP
 END
 
-OVERWRITE=''
+PICKLE.LIST=''
 READ OLD.PROG FROM OUT.FVAR, OUTPUT.ITEM THEN
-  PRINT OUTPUT.ITEM:' exists.  Recreate?  (Y/N):':
-  INPUT OVERWRITE
-  IF OVERWRITE#'Y' THEN STOP 'Quitting'
-END
-
-IF OVERWRITE='Y' THEN
   * Get the list of records from the existing OLD.PROG
   SWAP "#AM#" WITH @VM IN OLD.PROG ;* Yes, it's not a typo
   FOR F=1 TO DCOUNT(OLD.PROG,@AM)
+    IF FIELD(OLD.PROG<F>,' ',1)='EXECUTE' OR FIELD(OLD.PROG<F>,' ',1)='STREAM' THEN
+      * Keep execute statements, useful for CREATE.FILE etc.
+      BLOB<-1>=OLD.PROG<F>
+    END
+    *
     IF OLD.PROG<F>=\S=''\ THEN
       * The next line is the first row of a new record, and the first
       * two values are file name and item name
       T=OLD.PROG<F+1>[5,99]
       FILE=T<1,1>
       ITEM=T<1,2>
-      PRINT FILE, ITEM
-      GOSUB ADD.ITEM
+      PRINT FILE 'L#30':' ':ITEM
+      GOSUB CHECK.ITEM
+      IF OK THEN
+        ID=FILE:'|':ITEM
+        LOCATE ID IN PICKLE.LIST<1> BY 'AL' SETTING POS ELSE NULL
+        INS ID BEFORE PICKLE.LIST<1,POS>
+      END
     END
   NEXT F
-  PRINT 'Add any new items as needed, or hit ENTER to pickle'
+  PRINT 'Add any new items as needed, or hit ENTER to re-pickle'
 END
 
 LOOP
@@ -69,12 +76,24 @@ LOOP
     FILE=FIELD(L,' ',1)
     ITEM=FIELD(L,' ',2)
   END
-  GOSUB ADD.ITEM
+  GOSUB CHECK.ITEM
+  IF OK THEN
+    ID=FILE:'|':ITEM
+    LOCATE ID IN PICKLE.LIST<1> BY 'AL' SETTING POS ELSE NULL
+    INS ID BEFORE PICKLE.LIST<1,POS>
+  END
 REPEAT
+
+* Now we have the sorted list, actually read the items and add to the blob
+FOR I=1 TO DCOUNT(PICKLE.LIST<1>,@VM)
+  FILE=FIELD(PICKLE.LIST<1,I>,'|',1)
+  ITEM=FIELD(PICKLE.LIST<1,I>,'|',2)
+  GOSUB ADD.ITEM
+NEXT I
 
 * Write out basic code that when run will recreate the record
 BLOB<-1>='OVERWRITE=0'
-BLOB<-1>='IF FIELD(@SENTENCE," ",2)="OVERWRITE" THEN OVERWRITE=1'
+BLOB<-1>='IF FIELD(SENTENCE," ",2)="OVERWRITE" THEN OVERWRITE=1'
 BLOB<-1>='FOR F=1 TO DCOUNT(R,@AM)'
 BLOB<-1>='  REC=R<F>'
 BLOB<-1>='  SWAP "#AM#" WITH @AM IN REC'
@@ -95,7 +114,8 @@ BLOB<-1>='NEXT F'
 WRITE BLOB ON OUT.FVAR, OUTPUT.ITEM
 STOP "Written"
 
-ADD.ITEM:
+CHECK.ITEM:
+  OK=0
   OPEN FILE TO FVAR ELSE
     PRINT 'Cannot open ':FILE
     RETURN
@@ -104,6 +124,12 @@ ADD.ITEM:
     PRINT 'Cannot read ':FILE:' ':ITEM
     RETURN
   END
+  OK=1
+RETURN
+
+ADD.ITEM:
+  GOSUB CHECK.ITEM
+  IF NOT(OK) THEN STOP ;* Shouldn't happen at this point
   IF FILE[1,5]='DICT ' THEN DEL REC<9> ; DEL REC<8> ;* Avoid CD probs
   INS ITEM BEFORE REC<1>
   INS FILE BEFORE REC<1>
@@ -121,6 +147,6 @@ ADD.ITEM:
   UNTIL LEN(REC)=0 DO
   REPEAT
   BLOB<-1>='R<-1>=S'
-  BLOB<-1>=''
+  BLOB<-1>='*'
   CLOSE FVAR
 RETURN
