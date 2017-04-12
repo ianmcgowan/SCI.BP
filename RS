@@ -1,0 +1,461 @@
+***************************************************************************
+* Program: RS
+* Author : IAN
+* Date   : 12/24/97 Merry Xmas!
+* Edited : $Id: RS 11766 2006-05-05 23:22:04Z mcgowan $
+* Comment: Heavily modified original prog
+***************************************************************************
+* Date...... User.. Comment................................................
+* 04/17/1998 IAN    Use SCRED instead of DSI editor
+* 12/24/1997 IAN    Remove unused options, add recall list
+* 12/29/1997 IAN    Do not put timestamp into recall - use SCI.RECALL.DATA
+* 12/31/1997 IAN    Do not global data - keep accounts seperate
+* 12/31/1999 MATT   added touch file info
+* 02/14/2000 IAN    Modified touch file info to show when compiled
+* 07/23/2001 IAN    Add SCI.DUMP.RECALL option
+* 08/06/2002 IAN    Add copy option
+* 01/30/2003 IAN    Add email  option
+
+* $Log: RS,v $
+* Revision 1.10  2005/11/25 22:09:54  mcgowan
+* mcgowan:Remove DUMP option
+*
+* Revision 1.9  2003/06/22 22:56:39  dsiroot
+* mcgowan:Add the standard header page
+*
+* Revision 1.8  2003/06/17 22:50:47  dsiroot
+* mcgowan:Change email address generated
+*
+
+$INCLUDE SCI.BP SCREEN.VARS
+
+GOSUB INIT
+LOOP
+    CALL SCI.SCREEN.HDR(SCR.PROG,SCR.DESC)
+    PRINT @(4,4):"Command Name ":RECALL.NAME:EOS:
+    GOSUB DISP.RECALL
+    ANS = 'E'
+    CALL LOTUS(LIST,DESC,ANS)
+UNTIL ANS = 'Q' DO
+    LOCATE ANS IN LIST<1> SETTING POS ELSE POS = 0
+    ON POS GOSUB ATB,EDIT,COPY,MAIL,NEW,RUN,SEARCH,CWIDTH
+REPEAT
+STOP
+
+ATB:
+    ATB.LIST='E':@VM:'L':@VM:'N':@VM:'S':@VM:'Q'
+    ATB.DESC='Edit':@VM:'List':@VM:'New':@VM:'Search':@VM:'Quit'
+    LOOP
+        CALL SCREEN.HDR(SCR.PROG,SCR.DESC)
+        PRINT @(4,4):"Command Name ":RECALL.NAME:
+        GOSUB ATB.LIST
+        ATB.ANS = 'L'
+        CALL LOTUS(ATB.LIST,ATB.DESC,ATB.ANS)
+    UNTIL ATB.ANS = 'Q' DO
+        LOCATE ATB.ANS IN ATB.LIST<1> SETTING POS ELSE POS = 0
+        ON POS GOSUB ATB.EDIT,ATB.LIST,ATB.NEW,ATB.SEARCH
+    REPEAT
+RETURN
+
+ATB.EDIT:
+    PRINT BOTTOM:'Enter ATB# to edit: ':
+    INPUT ATB:
+    IF ATB='/' OR ATB='' THEN RETURN
+    EXECUTE \SCRED DICT \:INFILE:\ \:FLD.LIST<1,ATB>
+RETURN
+
+ATB.LIST:
+    * The text of the recall is in R when this routine is called
+    RECALL=R
+    TOT.WID=0
+    GOSUB PARSE.ATB.NAMES
+    PRINT @(0,5):EOS:
+    MIN.Y=6 ; X.WID=30 ; MAX.Y=22
+    X=4 ; Y=MIN.Y
+    FOR F=1 TO NUM.FLDS
+        FLD.NAME=FLD.LIST<1,F>
+        WID=FLD.LIST<5,F>
+        HDR=FLD.LIST<7,F>
+        LEVEL=FLD.LIST<6,F>
+        MESSY.HDR.FLAG=0
+        
+        * Only level 1 widths matter to total
+        IF LEVEL=1 THEN
+            * Strip R, L, D off width
+            WID=WID[1,LEN(WID)-1]
+            
+            * Yuck.  If a header is bigger than wid, header wins
+            FOR HDR.LINE=1 TO DCOUNT(HDR<1>,@VM)
+                IF LEN(HDR<1,HDR.LINE>) > WID THEN
+                    WID=LEN(HDR<1,HDR.LINE>)
+                    MESSY.HDR.FLAG=1
+                END
+            NEXT HDR.LINE
+            
+            TOT.WID+=WID
+            
+            * Every column has an extra space, too
+            TOT.WID+=1
+        END
+        
+        PRINT @(X,Y):F'R#3':')':
+        PRINT SPACE(LEVEL):FLD.NAME:
+        IF MESSY.HDR.FLAG THEN PRINT '*':
+        IF LEVEL=1 THEN PRINT ' (':WID:')':
+        
+        Y+=1
+        IF Y=MAX.Y THEN Y=MIN.Y ; X+=X.WID
+    NEXT F
+    PRINT @(60,4):"Total width=":TOT.WID
+RETURN
+
+PARSE.ATB.NAMES:
+    CONVERT " " TO @VM IN RECALL
+    CONVERT "~" TO "" IN RECALL
+    RECALL=TRIM(RECALL)
+    TOT.FLDS=DCOUNT(RECALL<1>,@VM)
+    NUM.FLDS=0
+    FLD.LIST='' ; COL.HEAD.LINE=''
+    INFILE=''
+    FOR F=1 TO TOT.FLDS
+        FLD.NAME=RECALL<1,F>
+        * Check this word to see if it's a file name, select,
+        * get-list or dictionary atb
+        IF INFILE='' THEN
+            OPEN FLD.NAME TO DUMMY THEN
+                INFILE=FLD.NAME
+                OPEN INFILE TO INFILE.F ELSE STOP 201,INFILE
+                OPEN 'DICT',INFILE TO @DICT ELSE STOP 201,'DICT ':INFILE
+                CLOSE DUMMY
+            END
+        END ELSE
+            * Recursive routine to grab fields all the way down
+            LEVEL=1
+            CALL SCI.STORE.FIELD(FLD.LIST,FLD.NAME,@DICT,LEVEL)
+        END
+    NEXT F
+    NUM.FLDS=DCOUNT(FLD.LIST<1>,@VM)
+    IF NUM.FLDS = 0 THEN
+        PRINT ; PRINT 'NO ATB NAMES FOUND IN RECALL'
+        STOP
+    END
+RETURN
+
+ATB.NEW:
+RETURN
+
+ATB.SEARCH:
+    EXECUTE \SF DICT \:INFILE
+RETURN
+
+COPY:
+    IF RECALL.NAME = "" THEN RETURN
+    PRINT BOTTOM:"Copy ":RECALL.NAME:" to: ":
+    INPUT NEW.NAME:
+    READ DUMMY FROM RECALL.F, NEW.NAME THEN
+        PRINT ERROR:NEW.NAME:" already on file, overwrite? ":
+        INPUT YORN:
+        IF YORN # 'Y' THEN RETURN
+    END
+    READ RECALL.REC FROM RECALL.F, RECALL.NAME THEN
+        WRITE RECALL.REC ON RECALL.F, NEW.NAME
+        NAME = NEW.NAME
+        NEW.RECALL = FALSE
+        GOSUB UPDATE.PERSONAL.REC
+        PRINT BOTTOM:RECALL.NAME:" copied to ":NEW.NAME:
+        SLEEP 2
+    END
+RETURN
+
+DUMP:
+    PRINT
+    EXECUTE \SCI.DUMP.RECALL \:RECALL.NAME
+    PRINT "Done - Press ENTER: ":
+    INPUT AAA
+RETURN
+
+MAIL:
+    CALL SCI.MAIL.ALIAS(@LOGNAME,DEF.USER)
+    PRINT BOTTOM:"To (Enter=":DEF.USER:") :":
+    INPUT USER
+    IF USER="/" THEN RETURN
+    IF USER="" THEN USER=DEF.USER
+    PRINT
+    EXECUTE \SCI.DUMP.RECALL \:RECALL.NAME:\ \:USER
+    PRINT "Done - Press ENTER: ":
+    INPUT AAA
+RETURN
+
+CWIDTH:
+    IF WIDTH=80 THEN
+        WIDTH=132
+        EXECUTE \P132\
+    END ELSE
+        WIDTH=80
+        EXECUTE \P80\
+    END
+RETURN
+
+RUN:
+    IF R MATCHES "0X'('0X'P'0X" THEN PRNT=TRUE ELSE PRNT=FALSE
+    POS = INDEX(R,"LPTR",1)
+    IF POS # 0 THEN PRNT=TRUE
+    
+    IF PRNT THEN
+        CALL SPLC.CHOOSE.PTR.SUB(PTR,RTN)
+    END ELSE
+        RTN = TRUE
+    END
+    
+    IF RTN THEN
+        CALL SCREEN.HDR(SCR.PROG,SCR.DESC)
+        PRINT @(4,4):"Command Name ":RECALL.NAME:EOS:
+        GOSUB DISP.RECALL
+        GOSUB COMPILE.RECALL
+        PRINT @(0,17):"Running  : ":RECALL.NAME:
+        T1 = TIME()
+        PRINT @(0,18):"Started  : ":OCONV(T1,"MTS")
+        PRINT
+        
+        IF PRNT THEN
+	    EXECUTE \SP.OPEN\
+	    PRINTER ON
+	    FOR F=1 TO 19; PRINT; NEXT F
+	    CALL SCI.CENTER(132,"",@LOGNAME,"",RESULT)
+	    PRINT RESULT
+	    CALL SCI.CENTER(132,"",TIMEDATE(),"",RESULT)
+	    PRINT RESULT
+	    CALL SCI.CENTER(132,"","Recall - ":RECALL.NAME,"",RESULT)
+	    PRINT RESULT
+	    CALL SCI.CENTER(132,"",RECALL.NAME,"",RESULT)
+	    PRINT RESULT
+	    PRINTER OFF
+	END ELSE
+	    EXECUTE \P132\
+	END
+        EXECUTE RECALL.NAME
+	EXECUTE \SP.CLOSE\
+        T2 = TIME()
+        PRINT @(0,19):"Finished : ":OCONV(T2,"MTS"):"  ":(T2-T1)/60:" minutes":
+        PRINT BOTTOM:"Press <RETURN> ": ; INPUT A:
+        IF NOT(PRNT) THEN EXECUTE \P80\
+    END
+RETURN
+
+SEARCH:
+    EXECUTE "SF RECALLS"
+RETURN
+
+EDIT:
+    READ RECALL.ORIG FROM RECALL.F, RECALL.NAME ELSE RECALL.ORIG = ''
+    RECALL.OLD=RECALL.ORIG<1>[2,9999]   ;* EXTRACT "*" AT FRONT
+    SWAP @VM WITH @AM IN RECALL.OLD
+    WRITE RECALL.OLD ON RECALL.TEMP, RECALL.NAME
+    EXECUTE "SCRED RECALL.TEMP ":RECALL.NAME
+    READ RECALL.NEW FROM RECALL.TEMP, RECALL.NAME ELSE RECALL.NEW=''
+    IF RECALL.NEW = '' THEN
+        PRINT BOTTOM:"Recall is empty, would you like to remove? ":
+        INPUT YORN:
+        IF YORN = 'Y' THEN
+            DELETE RECALL.F, RECALL.NAME
+            DELETE RECALL.F, "_":RECALL.NAME
+            PRINT BOTTOM:RECALL.NAME:" removed":
+            SLEEP 2
+        END
+    END ELSE
+        IF RECALL.NEW # RECALL.OLD THEN
+            SWAP @AM WITH @VM IN RECALL.NEW
+            R=RECALL.NEW
+            GOSUB BUILD.RECALL
+            GOSUB COMPILE.RECALL
+        END
+    END
+RETURN
+
+BUILD.RECALL:
+    REC = ""
+    REC<1> = "*":R
+    IF RECALL.ORIG<2>[1,1]='*' THEN REC<2> = RECALL.ORIG<2>
+    IF RECALL.ORIG<3>[1,1]='*' THEN REC<3> = RECALL.ORIG<3>
+    IF RECALL.ORIG<4>[1,1]='*' THEN REC<4> = "*":OCONV(DATE(),"D4/")
+    CALL SWAP(R,@VM," ")
+    CALL SWAP(R,"~",@VM)
+    I = DCOUNT(R,@VM)
+    IF I = 0 THEN I = 1
+    SEL.FLAG = 0
+    FOR F = 1 TO I
+        RL = TRIMB(R<1,F>)
+        IF RL # "" THEN
+            L = "EXECUTE \":RL:"\"
+            W1 = FIELD(RL,' ',1)
+            IF W1 = 'SELECT' OR W1 = 'GET-LIST' OR W1 = 'QSELECT' OR W1 = 'SSELECT' THEN
+                SEL.FLAG = TRUE
+                L = L:" RTNLIST LIST"
+            END ELSE
+                IF SEL.FLAG THEN L = L:" PASSLIST LIST"
+                SEL.FLAG = FALSE
+            END
+            REC<F+4> = L
+        END
+    NEXT F
+    REC<-1> = "END"
+    WRITE REC ON RECALL.F, RECALL.NAME
+    
+    READ HIST.REC FROM SCI.RECALL.DATA, RECALL.NAME ELSE HIST.REC=''
+    HIST.REC<4>=@LOGNAME
+    HIST.REC<5>=DATE()
+    HIST.REC<6>=TIME()
+    WRITE HIST.REC ON SCI.RECALL.DATA, RECALL.NAME
+    GOSUB GET.F.INFO
+RETURN
+
+COMPILE.RECALL:
+    EXECUTE 'DELETE RECALLS _':RECALL.NAME CAPTURING DUMMY
+    EXECUTE 'BASIC RECALLS ':RECALL.NAME CAPTURING DUMMY
+    IF INDEX(DUMMY,'fini',1) = 0 THEN
+        PRINT BOTTOM:RECALL.NAME:" failed to compile -- call IS! Press [RETURN] ":
+        INPUT A: ; RETURN
+    END
+    EXECUTE "CATALOG RECALLS ":RECALL.NAME:" DIRECT FORCE" CAPTURING DUMMY
+    EXECUTE "NEWPCODE"
+RETURN
+
+NEW:
+    GOSUB DISP.RECENT
+    L = ''
+    PRINT @(17,4):
+    CALL GET.LINE.STACK(17,99,40,L,RTN)
+    IF RTN # 13 OR L='' THEN RETURN
+    IF NUM(L) THEN
+        L=PERSONAL.REC<2,L>
+    END ELSE
+        READ DUMMY FROM VOC, L THEN
+            IF INDEX(DUMMY<2>,'RECALL',1) = 0 THEN
+                PRINT BOTTOM:L:" is already defined in the VOC! ":
+                INPUT A: ; RETURN
+            END
+        END
+    END
+    READ DUMMY FROM RECALL.F, L ELSE
+        PRINT BOTTOM:L:" not found - create? (Y/N=CR) ": ; INPUT YORN:
+        YORN=UPCASE(YORN[1,1])
+        IF YORN # 'Y' THEN RETURN
+    END
+    RECALL.NAME = L
+    NAME = RECALL.NAME
+    NEW.RECALL = TRUE
+    GOSUB UPDATE.PERSONAL.REC
+RETURN
+
+DISP.RECENT:
+    I=DCOUNT(PERSONAL.REC<2>,@VM)
+    X=0 ; Y=6
+    PRINT @(17,4):EOS:
+    FOR F=1 TO I
+        PRINT @(X,Y):F'R#2':') ':PERSONAL.REC<2,F>'L#30':
+        Y+=1
+        IF Y > 20 THEN
+            Y=6 ; X+=40
+            IF X > 70 THEN F=I ; PRINT @(15,70):"More...":
+        END
+    NEXT F
+RETURN
+
+UPDATE.PERSONAL.REC:
+    LOCATE NAME IN PERSONAL.REC<2> SETTING POS THEN
+        DEL PERSONAL.REC<2,POS>
+    END
+    INS NAME BEFORE PERSONAL.REC<2,1>
+    I=DCOUNT(PERSONAL.REC<2>,@VM)
+    FOR F=I TO 51 STEP -1
+        DEL PERSONAL.REC<2,F>
+    NEXT F
+    WRITE PERSONAL.REC ON SCI.RECALL.DATA, 'RECALL*':USER.ID
+    
+    * If we copy a recall, it's added to the list, but don't want to actually switch
+    IF NOT(NEW.RECALL) THEN RETURN
+    
+    PERSONAL.REC<1>=NAME
+    WRITE PERSONAL.REC ON SCI.RECALL.DATA, 'RECALL*':USER.ID
+    
+    READ HIST.REC FROM SCI.RECALL.DATA, NAME ELSE
+        HIST.REC=@LOGNAME ; HIST.REC<2>=DATE() ; HIST.REC<3>=TIME()
+        WRITE HIST.REC ON SCI.RECALL.DATA, RECALL.NAME
+    END
+    GOSUB GET.F.INFO
+RETURN
+
+DISP.RECALL:
+    READ RECALL.OLD FROM RECALL.F, RECALL.NAME ELSE RECALL.OLD = ''
+    R = RECALL.OLD<1>[2,9999]
+    I = DCOUNT(RECALL.OLD,@AM)
+    L = RECALL.OLD<I>
+    PRINT @(17,5):CREATE.BY:@(17,6):COMPILE.BY:
+    EDIT.ALLOW = 0 ; WORD.PROCESS = 0
+    GOSUB WP.SUB
+    PRINT EOS:
+RETURN
+
+WP.SUB:
+    CALL WP.INPUT(CL,LINE,R,STATUS,HELP.MSG,LENGTH.COL,LENGTH.LINE,MAX.LINES,MAY.CLEAR.EOL,THREE.LINE.HELP.MSG,EDIT.ALLOW,DISPLAY,WORD.PROCESS)
+RETURN
+
+INIT:
+    SCR.PROG = 'RECALL.SHELL' ; SCR.DESC = 'Info-Trieve Shell'
+    LIST = 'A':@VM:'E':@VM:'C':@VM:'M':@VM:'N':@VM:'R':@VM:'S':@VM:'W':@VM:'Q'
+    DESC = 'ATB':@VM:'Edit':@VM:'Copy':@VM:'Mail':@VM:'New':@VM:'Run':@VM:'Search':@VM:'Width':@VM:'Quit'
+    OPEN "RECALLS" TO RECALL.F ELSE STOP 201,"RECALLS"
+    OPEN "VOC" TO VOC ELSE STOP 201,"VOC"
+    OPEN 'SCI.RECALL.DATA' TO SCI.RECALL.DATA ELSE
+        EXECUTE 'CREATE.FILE SCI.RECALL.DATA 101,1'
+        OPEN 'SCI.RECALL.DATA' TO SCI.RECALL.DATA ELSE
+            PRINT 'CANNOT OPEN/CREATE SCI.RECALL.DATA'
+            STOP
+        END
+    END
+    OPEN 'RECALL.TEMP' TO RECALL.TEMP ELSE
+        PRINT 'CANNOT OPEN RECALL.TEMP, ATTEMPT TO CREATE? ':
+        INPUT YORN
+        IF UPCASE(YORN[1,1]) = 'Y' THEN
+            EXECUTE 'CREATE.FILE DIR RECALL.TEMP'
+            OPEN 'RECALL.TEMP' TO RECALL.TEMP ELSE
+                PRINT 'CANNOT OPEN OR CREATE RECALL.TEMP'
+                STOP
+            END
+        END
+    END
+    USER.ID=UPCASE(@LOGNAME)
+    READ PERSONAL.REC FROM SCI.RECALL.DATA, 'RECALL*':USER.ID ELSE PERSONAL.REC = ''
+    RECALL.NAME = PERSONAL.REC<1>
+    IF RECALL.NAME # '' THEN
+        READ HIST.REC FROM SCI.RECALL.DATA, RECALL.NAME ELSE HIST.REC=''
+        GOSUB GET.F.INFO
+    END ELSE
+        HIST.REC=''
+        MOD.BY="Modified by ":HIST.REC<4>:" on ":HIST.REC<5>'D4/':" at ":HIST.REC<6>'MTS'
+    END
+    
+    WIDTH = 80 ; CL=4 ; LINE=8 ; HELP.MSG = "" ; LENGTH.COL = 70
+    LENGTH.LINE = 13 ; MAX.LINES = 0 ; MAY.CLEAR.EOL = 1
+    THREE.LINE.HELP.MSG = 1 ; EDIT.ALLOW = 0 ; DISPLAY = 1 ; WORD.PROCESS = 0
+RETURN
+
+GET.F.INFO:
+    * Figure out who created it
+    F=\./RECALLS/RECALLS/\:RECALL.NAME
+    CALL SCI.GET.FILE.INFO(F, INFO)
+    CREATE.BY=""
+    IF INFO#"" THEN
+        CREATE.BY = "Modified: ":OCONV(INFO<10,1>,"D4/"):" ":OCONV(INFO<10,2>,"MTS")
+        CREATE.BY := " (":INFO<8>:" bytes)"
+    END
+    
+    * Now find out when it was compiled
+    F=\./RECALLS/RECALLS/_\:RECALL.NAME
+    CALL SCI.GET.FILE.INFO(F, INFO)
+    COMPILE.BY=""
+    IF INFO#"" THEN
+        COMPILE.BY = "Compiled: ":OCONV(INFO<10,1>,"D4/"):" ":OCONV(INFO<10,2>,"MTS")
+        COMPILE.BY := " (":INFO<8>:" bytes)":" by ":INFO<5>
+    END
+RETURN
