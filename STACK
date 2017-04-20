@@ -6,7 +6,7 @@
 * Comment: Stacks TCL commands
 ***************************************************************************
 EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
-EQUATE BANG TO '~'
+EQUATE SEARCH TO '~'
 EQUATE UNIX TO '!'
 EQUATE BELL TO CHAR(7), OTHERWISE TO 1
 EQUATE RET TO 13,ESC TO 27,UP.KEY TO 1,DOWN.KEY TO 2
@@ -163,8 +163,8 @@ DO.COMMAND:
         CASE ANS[1,1] = PROG.CHAR
             ANS = TRIM(UPCASE(ANS))
             GOSUB PROG.COMMAND
-        CASE ANS[1,1] = BANG
-            GOSUB BANG.COMMAND
+        CASE ANS[1,1] = SEARCH
+            GOSUB SEARCH.COMMAND
         CASE ANS = 'OFF' OR ANS = 'Q' OR ANS = 'INFO'
             ANS="STACK QUIT"
             GOSUB UPDATE.STACK
@@ -420,7 +420,7 @@ EDIT:
         BEGIN CASE
             CASE RTN = UP.KEY
                 IF SEARCH.FOR # NUL THEN
-                    GO BANG.COMMAND
+                    GO SEARCH.COMMAND
                 END ELSE
                     N = N + 1
                     IF STACK<N> = NUL THEN N = 1
@@ -457,7 +457,7 @@ EDIT:
     REPEAT
 RETURN
 
-BANG.COMMAND:
+SEARCH.COMMAND:
     * Search the stack for a string
     IF SEARCH.FOR = NUL THEN SEARCH.FOR = ANS[2,LONG.LINE]
     FOUND = FALSE
