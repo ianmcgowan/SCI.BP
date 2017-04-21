@@ -5,7 +5,7 @@
 * Edited : $Id: STACK 17349 2014-09-08 19:58:43Z mcgowi96 $
 * Comment: Stacks TCL commands
 ***************************************************************************
-PRINT 'Version 1.9'
+PRINT 'Version 1.9.7'
 EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
 EQUATE SEARCH TO '~'
 EQUATE UNIX TO '!'
@@ -48,7 +48,7 @@ SETTINGS      = ';'        ;* DEFAULT COMMAND SEPERATOR
 SETTINGS<2>   = '.'        ;* DEFAULT STACK CHAR
 SETTINGS<3>   = '/'        ;* DEFAULT PROG CHAR
 SETTINGS<4>   = 9999       ;* DEFAULT MAX # LINES IN STACK
-SETTINGS<5>   = '!vi'      ;* DEFAULT SCREEN EDITOR
+SETTINGS<5>   = '!vi'      ;* DEFAULT SCREEN EDITOR (try !joe :)
 SETTINGS<6>   = 'AE'       ;* DEFAULT LINE EDITOR
 SETTINGS<7>   ='* Edited :';* DEFAULT HEADER STRING
 SETTINGS<8>   = TRUE       ;* DEFAULT USE GET.LINE SUBR
@@ -73,8 +73,7 @@ ED.VERB      = SETTINGS<6>
 STAMP.STRING = SETTINGS<7>
 GET.LINE.FLAG= SETTINGS<8>
 WORK.FILE    = SETTINGS<9>
-*MCU.ON       = SETTINGS<10>
-MCU.ON       = FALSE
+MCU.ON       = SETTINGS<10>
 STARTUP      = SETTINGS<11>
 PROMT        = SETTINGS<12>
 X.DISP       = SETTINGS<13>
@@ -206,6 +205,9 @@ DO.COMMAND:
       GOSUB UPDATE.STACK
     CASE FIELD(ANS,SPC,1) = 'DDD'
       GOSUB DDD
+      GOSUB UPDATE.STACK
+    CASE FIELD(ANS,SPC,1) = 'BPI'
+      GOSUB BPI
       GOSUB UPDATE.STACK
     CASE FIELD(ANS,SPC,1) = 'SF'
       GOSUB SEARCH.FILE
@@ -404,16 +406,17 @@ STACK.COMMAND:
       PRINT '/           List the active program stack'
       PRINT '/LL         List all available program stacks'
       PRINT '/L BLAH     Switch the program stack to BLAH'
-      PRINT '/Nx Add a New program'
+      PRINT '/Nx Add a New program        /Fx Format the x`th program'
       PRINT '/Ex Edit the x`th program    /WW Edit the program list'
       PRINT '/Wx VI the x`th program      /S  Sort the program stack'
       PRINT '/Bx Compile the x`th program /BR Compile and run'
       PRINT
       PRINT 'UTILITIES-----------------------------------------------------'
+      PRINT 'BPI         List table definitions - BPI LS.CTD.PYMTHIST'
       PRINT 'CI/CM/TM    Contract Inquiry/Maintenance/Table Maintenance'
       PRINT 'DDD         Search dictionary definitions - DDD LS.MASTER EQUIP'
       PRINT 'ICONV/OCONV Test format masks/Convert Data'
-      PRINT 'PIVOT       Profile data - PIVOT LS.MASTER LESSOR'
+      PRINT 'PIVOT       Profile data - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
       PRINT 'SF          Search files and dictionaries - SF DICT LS.MASTER ASSETS'
     CASE ANS = '.U'
       IF MCU.ON THEN MCU.ON = FALSE;PRINT 'upper case off' ELSE MCU.ON = TRUE;PRINT 'UPPER CASE ON'
@@ -609,8 +612,7 @@ PROG.COMMAND:
       END
       CLOSE F
     CASE PROG.COM = '/F'
-      EXEC.LINE = 'BFORMAT ':PROG:OPTIONS
-      GOSUB EXEC.SUB
+      GOSUB BFORMAT
     CASE PROG.COM = '/R'
       OPEN B.FILE TO F ELSE PRINT 'Cannot open ':B.FILE:BELL;RETURN
       READV R FROM F, B.ITEM, 1 ELSE R=NUL
@@ -814,7 +816,7 @@ CONV:
   LOOP
     PRINT 'Enter mask:':
     INPUT MASK
-    IF MASK='' THEN RETURN
+    IF MASK='' OR MASK='/' THEN RETURN
     PRINT 'Enter data:':
     INPUT DTA
     PRINT 'Result:':
@@ -926,4 +928,123 @@ SEARCH.FILE.PROMPT:
       QUIT=1
   END CASE
   PRINT HDR
+  RETURN
+  *
+BPI:
+  FILE=FIELD(ANS,' ',2)
+  IF FILE='' THEN PRINT 'Usage: BPI <name of infolease file>' ; RETURN
+  OPEN 'DATABASE.FILES,IL' TO IL ELSE STOP 201,'DATABASE.FILES,IL'
+  READV BPI FROM IL, FILE, 14 ELSE PRINT 'Cannot read DATABASE.FILES,IL',FILE ; RETURN
+  PRINT BPI
+  N=DCOUNT(BPI,' ')
+  BPI=FIELD(BPI,' ',N-1)
+  EXECUTE \AE IL.BPI \:BPI
+  CLOSE IL
+  RETURN
+  *
+BFORMAT:
+  STAR  = '*' ; COLON = ':' ; TAB=CHAR(9)
+  IND = 0
+  *
+  * These are all commands that may have ELSE or THEN statements
+  * (or blocks) following them
+  SPECIAL.CASES = "GET":@AM:"INPUT":@AM:"LOCATE":@AM:"LOCK":@AM:"MATREAD":@AM:"MATREADU":@AM
+  SPECIAL.CASES:= "MATWRITE":@AM:"MATWRITEU":@AM:"OPEN":@AM:"PROCREAD":@AM
+  SPECIAL.CASES:= "PROCWRITE":@AM:"READ":@AM:"READNEXT":@AM:"READSEQ":@AM:"READT":@AM:"READU":@AM:"READV":@AM
+  SPECIAL.CASES:= "READVU":@AM:"REWIND":@AM:"SEEK":@AM:"WEOF":@AM:"WRITESEQ":@AM
+  SPECIAL.CASES:= "WRITET"
+  *
+  DEF.INDENT=2
+  FORMATS=":":@VM:"BEGIN":@VM:"CASE":@VM:"ELSE":@VM:"END":@VM:"FOR":@VM
+  FORMATS:="IF":@VM:"LOOP":@VM:"NEXT":@VM:"REPEAT":@VM:"RETURN":@VM
+  FORMATS:="THEN":@VM:"UNTIL":@VM:"WHILE"
+  * THIS.IND is the amount this line will be in or outdented
+  FORMATS<2>=0:@VM:0:@VM:-1:@VM:0:@VM:-1:@VM:0:@VM:0:@VM
+  FORMATS<2>:=0:@VM:-1:@VM:-1:@VM:-1:@VM:0:@VM:-1:@VM:-1
+  * NEXT.IND is the amount that all following lines will be indented
+  FORMATS<3>=1:@VM:2:@VM:0:@VM:1:@VM:-1:@VM:1:@VM:1:@VM
+  FORMATS<3>:=1:@VM:-1:@VM:-1:@VM:-1:@VM:1:@VM:0:@VM:0
+  FORMATS<4>=DEF.INDENT
+  *
+  OPEN B.FILE TO FI ELSE PRINT 'Cannot open ':B.FILE ; RETURN
+  READ REC FROM FI,B.ITEM ELSE PRINT "CANNOT READ ":B.FILE:" ":B.ITEM ; RETURN
+  *WRITE REC ON FI,B.NAME:".BAK"
+  SWAP CHAR(9) WITH SPACE(DEF.INDENT) IN REC
+  *
+  I = DCOUNT(REC,@AM)
+  IF I < 2 THEN RETURN
+  FOR F = 1 TO I
+    PRINT STAR:
+    L = REC<F> ; NEXT.LINE=REC<F+1>
+    GOSUB FORMAT.LINE
+    REC<F> = L
+  NEXT F
+  WRITE REC ON FI,B.ITEM
+  PRINT STAR ; PRINT I:" lines of ":B.ITEM:" formatted"
+  RETURN
+  *
+FORMAT.LINE:
+  L=TRIM(L,' ','B')
+  CONVERT TAB TO "" IN L
+  FIRST.WORD = FIELD(L,SPC,1)
+  LEN.FIRST.WORD = LEN(FIRST.WORD)
+  LOCATE FIRST.WORD IN SPECIAL.CASES BY 'AL' SETTING SPECIAL ELSE SPECIAL = 0
+  NUM.SPACES = COUNT(L,SPC) + 1
+  LAST.WORD = FIELD(L,SPC,NUM.SPACES)
+  NEXT.TO.LAST.WORD = FIELD(L,SPC,NUM.SPACES-1)
+  THIS.IND = 0
+  NEXT.IND = 0
+  BEGIN CASE
+    CASE L=""
+      L="*" ;* Makes pasting code around easier with no blank lines
+    CASE FIRST.WORD[LEN.FIRST.WORD,1] = COLON OR NUM(FIRST.WORD)
+      * A label
+      IND = 0
+      LOCATE COLON IN FORMATS<1> SETTING POS ELSE POS = 0
+      THIS.IND = FORMATS<2,POS>
+      NEXT.IND = FORMATS<3,POS>
+    CASE FIRST.WORD = "IF"
+      LOCATE FIRST.WORD IN FORMATS<1> SETTING POS ELSE POS = 0
+      IF LAST.WORD = "THEN" THEN
+        THIS.IND = FORMATS<2,POS>
+        NEXT.IND = FORMATS<3,POS>
+      END
+    CASE FIRST.WORD = "END"
+      SECOND.WORD = FIELD(L,SPC,2)
+      IF SECOND.WORD = "ELSE" THEN
+        LOCATE "ELSE" IN FORMATS<1> SETTING POS ELSE POS = 0
+        THIS.IND = -FORMATS<3,POS>
+        NEXT.IND = FORMATS<2,POS>
+      END ELSE
+        IF SECOND.WORD = "CASE" THEN
+          LOCATE "BEGIN" IN FORMATS<1> SETTING POS ELSE POS = 0
+          THIS.IND = -FORMATS<3,POS>
+          NEXT.IND = -FORMATS<3,POS>
+        END ELSE
+          LOCATE FIRST.WORD IN FORMATS<1> SETTING POS ELSE POS = 0
+          THIS.IND = FORMATS<2,POS>
+          NEXT.IND = FORMATS<3,POS>
+        END
+      END
+    CASE SPECIAL
+      * Find last word - skip until a space
+      IF LAST.WORD = "ELSE" OR LAST.WORD = "THEN" THEN
+        LOCATE LAST.WORD IN FORMATS<1> SETTING POS ELSE POS = 0
+        THIS.IND = FORMATS<2,POS>
+        NEXT.IND = FORMATS<3,POS>
+      END
+    CASE FIRST.WORD = "FOR" AND NEXT.TO.LAST.WORD = "NEXT"
+      * FOR loop on one line means do nothing
+    CASE FIRST.WORD = "RETURN" AND NEXT.LINE # ""
+      * RETURN without a blank line means do nothing
+    CASE 1
+      LOCATE FIRST.WORD IN FORMATS<1> SETTING POS ELSE POS = 0
+      IF POS # 0 THEN
+        THIS.IND = FORMATS<2,POS>
+        NEXT.IND = FORMATS<3,POS>
+      END
+  END CASE
+  L = SPACE((IND+THIS.IND)*DEF.INDENT):L
+  *L = STR(TAB,IND+THIS.IND):L
+  IND = IND + NEXT.IND
 RETURN
