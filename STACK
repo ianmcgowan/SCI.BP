@@ -711,7 +711,7 @@ COMPILE:
     INPUT OPTIONS
     OPTIONS=UPCASE(OPTIONS)
     IF OPTIONS = '/' OR OPTIONS='' THEN RETURN
-    * Have to enter L or G
+    * Have to enter D, L or G
     IF OPTIONS # 'L' AND OPTIONS # 'G' AND OPTIONS # 'D' THEN OPTIONS=''
   REPEAT
   *
@@ -1089,7 +1089,7 @@ FORMAT.LINE:
       END
   END CASE
   L = SPACE((IND+THIS.IND)*DEF.INDENT):L
-  *L = STR(TAB,IND+THIS.IND):L
+  *L = STR(TAB,IND+THIS.IND):L ;* In my misguided youth, tabs seemed cool
   IND = IND + NEXT.IND
 RETURN
 *
@@ -1100,7 +1100,7 @@ GET.LINE:
   * DISP.LEN    = MAX DISPLAYED LEN
   * XXDATA      = ON INPUT  VARIABLE XXDATA
   *             = ON OUTPUT RETURNED STRING
-  * RTN    = SEQ(CHAR PRESSED TO EXIT)
+  * RTN         = SEQ(CHAR PRESSED TO EXIT)
   * -----------------
   * Important globals
   * CP          = Cursor Position, Y coordinate on the screen 0 -> DISP.LEN
