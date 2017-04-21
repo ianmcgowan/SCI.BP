@@ -8,6 +8,7 @@
 PRINT 'Version 1.9.7'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
+EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
 EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
 EQUATE SEARCH TO '~'
 EQUATE UNIX TO '!'
@@ -96,14 +97,14 @@ EXEC.LINE="!hostname" ; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
 HOST.NAME=EXEC.CAP<1>
 *
 READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
-ANS="STACK START"
-GOSUB UPDATE.STACK
 READ ALIASES FROM HOME.F, ALIAS.ITEM ELSE ALIASES = NUL
-IF ALIASES=NUL THEN
-  ALIASES<1>='ACTIVE'
-  ALIASES<2>='SELECT LS.MASTER WITH NUM.OF.ASSETS > "0"'
-  WRITE ALIASES ON HOME.F, ALIAS.ITEM
-END
+* Override with my favorites for now.  It's a pain to manage per system.
+ALIASES<1>='ACTIVE'
+ALIASES<1,2>='CS'
+ALIASES<1,3>='L'
+ALIASES<2>='SELECT LS.MASTER WITH NUM.OF.ASSETS > "0"'
+ALIASES<2,2>='CLEARSELECT'
+ALIASES<2,3>='LIST LS.MASTER'
 OLD.X.DISP=X.DISP
 RTN=NUL
 IF STARTUP # NUL THEN ANS=STARTUP ; GOSUB COMMAND ; STARTUP=NUL
@@ -135,10 +136,27 @@ GET.INPUT:
 RETURN
 *
 COMMAND:
+  MAX.STACK=DCOUNT(STACK,@AM)
   BEGIN CASE
       * Map up and down arrows to .R1 and .Rn
     CASE RTN = UP.KEY
       ANS = '.R1'
+    CASE RTN = PG.UP.KEY
+      IF UNASSIGNED(P2) THEN P2 = 20
+      IF UNASSIGNED(P1) THEN P1 = 1
+      P2 = P2 + 20
+      P1 = P1 + 20
+      IF P2 > MAX.STACK THEN P2 = MAX.STACK
+      IF P1 > MAX.STACK-20 THEN P1 = MAX.STACK-20
+      ANS = '.L':P1:',':P2
+    CASE RTN = PG.DOWN.KEY
+      IF UNASSIGNED(P2) THEN P2 = 20
+      IF UNASSIGNED(P1) THEN P1 = 1
+      P2 = P2 - 20
+      P1 = P1 - 20
+      IF P2 < 20 THEN P2=20
+      IF P1 < 1 THEN P1=1
+      ANS = '.L':P1:',':P2
     CASE ANS='?'
       ANS='.H'
   END CASE
@@ -185,8 +203,6 @@ DO.COMMAND:
     CASE ANS[1,1] = SEARCH
       GOSUB SEARCH.COMMAND
     CASE ANS = 'OFF' OR ANS = 'Q' OR ANS = 'INFO'
-      ANS="STACK QUIT"
-      GOSUB UPDATE.STACK
       GOSUB WRITE.INFO
       STOP
     CASE ANS[1,5] = 'ALIAS'
@@ -249,7 +265,6 @@ DO.COMMAND:
       IF ANS[1,6] = 'SELECT' OR ANS[2,6]= 'SELECT' OR ANS[1,8]= 'GET.LIST' OR ANS[1,6] = 'SEARCH' THEN SELECT.STATEMENT=TRUE
       EXEC.LINE = ANS
       GOSUB EXEC.SUB
-      IF SELECT.STATEMENT THEN SL.ACTIVE=TRUE ELSE SL.ACTIVE=FALSE
   END CASE
 RETURN
 *
@@ -300,20 +315,12 @@ RETURN
 *
 EXEC.SUB:
   IF EXEC.LINE = NUL THEN RETURN
-  BEGIN CASE
-    CASE SL.ACTIVE AND SELECT.STATEMENT
-      EXECUTE EXEC.LINE PASSLIST SEL.LIST.IN RTNLIST SEL.LIST.OUT
-      SEL.LIST.IN=SEL.LIST.OUT
-    CASE SL.ACTIVE
-      EXECUTE EXEC.LINE PASSLIST SEL.LIST.IN
-    CASE SELECT.STATEMENT
-      EXECUTE EXEC.LINE RTNLIST SEL.LIST.OUT
-      SEL.LIST.IN=SEL.LIST.OUT
-    CASE CAP.ACTIVE
-      EXECUTE EXEC.LINE CAPTURING EXEC.CAP
-    CASE 1
-      EXECUTE EXEC.LINE
-  END CASE
+  IF CAP.ACTIVE THEN
+    EXECUTE EXEC.LINE CAPTURING EXEC.CAP
+  END ELSE
+    EXECUTE EXEC.LINE
+  END
+  IF SYSTEM(11) > 0 THEN SL.ACTIVE = TRUE ELSE SL.ACTIVE = FALSE
 RETURN
 *
 EXPAND.PROG.CHARS:
@@ -426,11 +433,11 @@ STACK.COMMAND:
     CASE ANS = '.H'
       PRINT 'TCL STACK COMMANDS--------------------------------------------'
       PRINT 'Ctrl-A      Start of line    Ctrl-R      Toggle insert mode'
-      PRINT 'Ctrl-B      Back one char    Ctrl-W      Delete word'
-      PRINT 'Ctrl-D      Delete char      Ctrl-X      Forward word'
-      PRINT 'Ctrl-E      End of line      Ctrl-Z      Back word'
-      PRINT 'Ctrl-F      Forward char     '
-      PRINT 'Ctrl-G      Cancel line      '
+      PRINT 'Ctrl-B      Back one char    Ctrl-U      Page Up'
+      PRINT 'Ctrl-D      Delete char      Ctrl-V      Page Down'
+      PRINT 'Ctrl-E      End of line      Ctrl-W      Delete word'
+      PRINT 'Ctrl-F      Forward char     Ctrl-X      Forward word'
+      PRINT 'Ctrl-G      Cancel line      Ctrl-Z      Back word'
       PRINT 'Ctrl-I      Forward word     ~xyz        Search for xyz'
       PRINT 'Ctrl-J      Delete to end    .D          Toggle detail off/on'
       PRINT 'Ctrl-L      Clear screen     .Lm,n       List entry m thru n'
@@ -876,12 +883,12 @@ PIVOT:
     WRITE UREC ON DICT,"UATB.COUNTER"
   END
   CLOSE DICT
-  EX = \SORT \:FILE:\ BY \:ATB:\ BREAK-ON \:ATB:\ TOTAL UATB.COUNTER \
-  IF ATB2 # "" THEN EX:= \ TOTAL \:ATB2
-  IF ATB3 # "" THEN EX:= \ TOTAL \:ATB3
-  IF ATB4 # "" THEN EX:= \ TOTAL \:ATB4
-  EX:= \ (IDH \
-  EXECUTE EX
+  EXEC.LINE = \SORT \:FILE:\ BY \:ATB:\ BREAK-ON \:ATB:\ TOTAL UATB.COUNTER \
+  IF ATB2 # "" THEN EXEC.LINE:= \ TOTAL \:ATB2
+  IF ATB3 # "" THEN EXEC.LINE:= \ TOTAL \:ATB3
+  IF ATB4 # "" THEN EXEC.LINE:= \ TOTAL \:ATB4
+  EXEC.LINE:= \ (IDH \
+  GOSUB EXEC.SUB
 RETURN
 *
 DDD:
@@ -890,7 +897,8 @@ DDD:
   SSTR = FIELD(ANS," ",3)
   FIND.STR=""
   IF SSTR # "" THEN FIND.STR = \WITH @ID = "[\:SSTR:\]" \
-  EXECUTE \SORT DICT \:FILE:\ @ID F1 F2 BY F1 BY F2 \:FIND.STR:\ USING DICT VOC (I \
+  EXEC.LINE=\SORT DICT \:FILE:\ @ID F1 F2 BY F1 BY F2 \:FIND.STR:\ USING DICT VOC (I \
+  GOSUB EXEC.SUB
 RETURN
 *
 SEARCH.FILE:
@@ -1160,6 +1168,12 @@ GET.LINE:
         EXIT.FLAG=TRUE
       CASE ASC.CH = 18
         GOSUB INSRT
+      CASE ASC.CH = PG.UP.KEY
+        EXIT.FLAG=TRUE
+        RTN=PG.UP.KEY
+      CASE ASC.CH = PG.DOWN.KEY
+        EXIT.FLAG=TRUE
+        RTN=PG.DOWN.KEY
       CASE ASC.CH = 23
         GOSUB DELETE.WORD
       CASE ASC.CH = 24
