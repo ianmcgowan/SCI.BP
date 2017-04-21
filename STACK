@@ -191,13 +191,25 @@ DO.COMMAND:
       EXECUTE \CMAINT.00\
       GOSUB UPDATE.STACK
     CASE ANS = 'CM'
-      * CONTRACT INQUIRY
+      * CONTRACT MAINTENANCE
       DATA 1
       DATA 0
       DATA 0
       DATA 0
       EXECUTE \CMAINT.00\
       GOSUB UPDATE.STACK
+    CASE ANS = 'CCI'
+      * CUSTOMER INQUIRY
+      DATA 0
+      DATA 0
+      DATA 0
+      EXECUTE \CDMAINT.00\
+    CASE ANS = 'CCM'
+      * CUSTOMER MAINTENANCE
+      DATA 1
+      DATA 0
+      DATA 0
+      EXECUTE \CDMAINT.00\
     CASE ANS = 'TM'
       DATA 1
       DATA 0
