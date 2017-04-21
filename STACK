@@ -18,7 +18,7 @@ CS=@(-1);EOL=@(-4);EOS=@(-3);UP=@(-10)
 PROMPT NUL
 SEL.LIST.OUT = ""
 *
-LONG.LINE = 9999
+LONG.LINE = 9999;LIST.DET.FLAG=0
 EXECUTING = FALSE;SL.ACTIVE = FALSE
 SELECT.LIST = NUL;OLD.WORD = NUL
 SELECT.STATEMENT=FALSE ; CAP.ACTIVE=FALSE
@@ -391,6 +391,8 @@ RETURN
 *
 STACK.COMMAND:
   BEGIN CASE
+    CASE ANS='.D'
+      LIST.DET.FLAG=NOT(LIST.DET.FLAG)
     CASE ANS[1,2] = '.L'
       IF ANS = '.L' THEN ANS = '.L,20'
       GOSUB GET.PARAMS
@@ -400,7 +402,11 @@ STACK.COMMAND:
       IF P2 > I THEN P2 = I
       PRINT
       FOR F = P2 TO P1 STEP -1
-        PRINT SPC:F'R#3':" ":STACK<F,4>
+        IF LIST.DET.FLAG THEN
+          PRINT SPC:F'R#3':" ":STACK<F,1>'L#20':' ':OCONV(STACK<F,2>,'D-YMD'):' ':OCONV(STACK<F,3>,'MTS'):' ':STACK<F,4>
+        END ELSE
+          PRINT SPC:F'R#3':" ":STACK<F,4>
+        END
       NEXT F
     CASE ANS[1,2] = '.R' OR ANS[1,2] = '.X'
       IF STACK = NUL THEN PRINT BELL ELSE GO EDIT
@@ -426,7 +432,7 @@ STACK.COMMAND:
       PRINT 'Ctrl-F      Forward char     '
       PRINT 'Ctrl-G      Cancel line      '
       PRINT 'Ctrl-I      Forward word     ~xyz        Search for xyz'
-      PRINT 'Ctrl-J      Delete to end    '
+      PRINT 'Ctrl-J      Delete to end    .D          Toggle detail off/on'
       PRINT 'Ctrl-L      Clear screen     .Lm,n       List entry m thru n'
       PRINT 'Ctrl-M      Accept line      .Rn         Restore entry n, edit'
       PRINT 'Ctrl-N      Next line        '
