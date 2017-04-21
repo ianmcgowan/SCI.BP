@@ -2,15 +2,18 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Edited : $Id: STACK 17349 2014-09-08 19:58:43Z mcgowi96 $
+* Version: 1.9.7
 * Comment: Stacks TCL commands
 ***************************************************************************
 PRINT 'Version 1.9.7'
+EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
+EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
 EQUATE SEARCH TO '~'
 EQUATE UNIX TO '!'
 EQUATE BELL TO CHAR(7), OTHERWISE TO 1
-EQUATE RET TO 13,ESC TO 27,UP.KEY TO 1,DOWN.KEY TO 2
+TERM=UPCASE(GETENV("TERM"))
+IF INDEX(TERM,'WY',1) THEN TERM='W'
 CS=@(-1);EOL=@(-4);EOS=@(-3);UP=@(-10)
 PROMPT NUL
 SEL.LIST.OUT = ""
@@ -109,13 +112,14 @@ REPEAT
 *
 GET.INPUT:
   IF GET.LINE.FLAG THEN
-    CALL GET.LINE.STACK(X,LEN,DISP.LEN,ENTRY,RTN)
+    *CALL GET.LINE.STACK(X,LEN,DISP.LEN,ENTRY,RTN)
+    GOSUB GET.LINE
   END ELSE
     PRINT @(X):;INPUT ENTRY
     RTN = RET
   END
-  RETURN
-  *
+RETURN
+*
 COMMAND:
   BEGIN CASE
       * Map up and down arrows to .R1 and .Rn
@@ -144,8 +148,8 @@ COMMAND:
     REPEAT
   END
   WRITE ALIASES ON HOME.F, ALIAS.ITEM
-  RETURN
-  *
+RETURN
+*
 DO.COMMAND:
   IF NOT(UNIX.COMMAND) THEN
     IF MCU.ON THEN ANS = TRIM(UPCASE(ANS))
@@ -221,8 +225,8 @@ DO.COMMAND:
       GOSUB EXEC.SUB
       IF SELECT.STATEMENT THEN SL.ACTIVE=TRUE ELSE SL.ACTIVE=FALSE
   END CASE
-  RETURN
-  *
+RETURN
+*
 DO.ALIAS:
   AL = FIELD(ANS,SPC,2)
   STRING = NUL;I = 3
@@ -240,8 +244,8 @@ DO.ALIAS:
     CASE 1
       GOSUB SET.ALIAS
   END CASE
-  RETURN
-  *
+RETURN
+*
 SET.ALIAS:
   STRING=STRING[2,LONG.LINE]
   PRINT AL:'=':STRING
@@ -250,15 +254,15 @@ SET.ALIAS:
   END ELSE
     INS AL BEFORE ALIASES<1,P>;INS STRING BEFORE ALIASES<2,P>
   END
-  RETURN
-  *
+RETURN
+*
 LIST.ALIAS:
   I = DCOUNT(ALIASES<1>,@VM)
   FOR F = 1 TO I
     PRINT ALIASES<1,F>,ALIASES<2,F>
   NEXT F
-  RETURN
-  *
+RETURN
+*
 LIST.ONE.ALIAS:
   LOCATE AL IN ALIASES<1> BY 'AL' SETTING P ELSE PRINT AL:' not found';RETURN
   X=0;LEN=99;DISP.LEN=30;ENTRY=ALIASES<2,P>
@@ -266,8 +270,8 @@ LIST.ONE.ALIAS:
   IF RTN = 27 THEN RETURN
   ALIASES<2,P> = ENTRY
   IF ENTRY = NUL THEN DEL ALIASES<1,P>;DEL ALIASES<2,P>
-  RETURN
-  *
+RETURN
+*
 EXEC.SUB:
   IF EXEC.LINE = NUL THEN RETURN
   BEGIN CASE
@@ -284,8 +288,8 @@ EXEC.SUB:
     CASE 1
       EXECUTE EXEC.LINE
   END CASE
-  RETURN
-  *
+RETURN
+*
 EXPAND.PROG.CHARS:
   * expand //10 to be IV.BP IV.EQP.MNT for example
   POS = 1
@@ -305,8 +309,8 @@ EXPAND.PROG.CHARS:
       POS = POS + 1
     END
   REPEAT
-  RETURN
-  *
+RETURN
+*
 EXPAND.ALIASES:
   SWAP SPC WITH @VM IN ANS ; POS = 1
   LOOP
@@ -316,8 +320,8 @@ EXPAND.ALIASES:
     POS = POS + 1
   REPEAT
   SWAP @VM WITH SPC IN ANS
-  RETURN
-  *
+RETURN
+*
 EXPAND.PROMPT:
   IF SL.ACTIVE THEN
     PROMPT.DISP='#RSEL>'
@@ -357,8 +361,8 @@ EXPAND.PROMPT:
         CTR = CTR + 1
     END CASE
   REPEAT
-  RETURN
-  *
+RETURN
+*
 STACK.COMMAND:
   BEGIN CASE
     CASE ANS[1,2] = '.L'
@@ -424,8 +428,8 @@ STACK.COMMAND:
       PRINT 'There is no such STACK command':BELL
       PRINT '? for help'
   END CASE
-  RETURN
-  *
+RETURN
+*
 GET.PARAMS:
   I = INDEX(ANS,',',1)
   IF I # 0 THEN
@@ -450,8 +454,8 @@ GET.PARAMS:
     RANGE.ERROR = TRUE
     PRINT 'Range Error':BELL
   END
-  RETURN
-  *
+RETURN
+*
 EDIT:
   * Some of the stuff in here is redundant, repeating COMMAND
   * but to gosub command introduces re-entrancy problems
@@ -507,8 +511,8 @@ EDIT:
         N = NUL
     END CASE
   REPEAT
-  RETURN
-  *
+RETURN
+*
 SEARCH.COMMAND:
   * Search the stack for a string
   IF SEARCH.FOR = NUL THEN SEARCH.FOR = ANS[2,LONG.LINE]
@@ -522,8 +526,8 @@ SEARCH.COMMAND:
     GO EDIT
   END
   PRINT BELL:SEARCH.FOR:' event not found'
-  RETURN
-  *
+RETURN
+*
 PROG.COMMAND:
   IF ANS = PROG.CHAR OR ANS=PROG.CHAR:PROG.CHAR THEN GO PRINT.PROG.INFO
   GOSUB PARSE.PROG.COM
@@ -545,21 +549,24 @@ PROG.COMMAND:
       IF B.FILE # '' THEN
         OPEN B.FILE TO F THEN
           OPTIONS=''
-          *CALL CVS.CHECKOUT(RTN, B.FILE, B.ITEM, OPTIONS)
           READ DUMMY FROM F, B.ITEM ELSE
             PRINT B.ITEM:' not found.  Use standard header? ':
             INPUT YORN
             IF YORN = 'Y' THEN
-              READ HEADER FROM F, 'SCI.HEADER' THEN
-                SWAP "$*" WITH "$" IN HEADER
-                HEADER<2>=HEADER<2>[1,12]:B.ITEM
-                HEADER<3>=HEADER<3>[1,12]:USERNAME
-                HEADER<4>=HEADER<4>[1,12]:OCONV(DATE(),"DYMD")
-                WRITE HEADER ON F, B.ITEM
-              END
+              HEADER=STR('*',80)
+              HEADER<2>='* Program: ':B.ITEM
+              HEADER<3>='* Author : ':USERNAME
+              HEADER<4>='* Date   : ':OCONV(DATE(),"D-YMD") ;* E.g. 2017-04-20
+              HEADER<5>='* Version: 1.0'
+              HEADER<6>='* Comment: Do NOT skip the description'
+              HEADER<7>=STR('*',80)
+              WRITE HEADER ON F, B.ITEM
             END
           END
           CLOSE F
+          WP.FILE=B.FILE
+          WP.ITEM=B.ITEM
+          GOSUB WP.EDIT
         END ELSE
           PRINT B.FILE:' is not a file in this account'
         END
@@ -617,11 +624,7 @@ PROG.COMMAND:
       OPEN B.FILE TO F ELSE PRINT 'Cannot open ':B.FILE:BELL;RETURN
       READV R FROM F, B.ITEM, 1 ELSE R=NUL
       CLOSE F
-      IF R='PQ' THEN
-        EXEC.LINE= 'RP ':PROG:OPTIONS
-      END ELSE
-        EXEC.LINE = B.ITEM:OPTIONS
-      END
+      EXEC.LINE = B.ITEM:OPTIONS
       GOSUB EXEC.SUB
     CASE PROG.COM = '/S'
       E=\SORT.RECORD \:HOME.FILE:\ \:PROGRAM.ITEM
@@ -630,8 +633,8 @@ PROG.COMMAND:
       PRINT 'There is no such PROGRAM command':BELL
       PRINT '? for help'
   END CASE
-  RETURN
-  *
+RETURN
+*
 COMPILE:
   OPTIONS=''
   * Check for global catalog
@@ -671,8 +674,7 @@ COMPILE:
     IF OPTIONS # 'L' AND OPTIONS # 'G' AND OPTIONS # 'D' THEN OPTIONS=''
   REPEAT
   *
-  EXEC.LINE = 'BASIC ':B.FILE:' '
-  EXEC.LINE := B.ITEM:' -D'
+  EXEC.LINE = 'BASIC ':B.FILE:' ':B.ITEM:' -D' ;* -D includes symbol table
   PRINT EXEC.LINE
   GOSUB EXEC.SUB
   *
@@ -697,10 +699,10 @@ COMPILE:
       GOSUB EXEC.SUB
   END CASE
   *
-  EXEC.LINE = 'NEWPCODE'
+  EXEC.LINE = 'NEWPCODE' ;* This loads a new version of globally cataloged programs
   GOSUB EXEC.SUB
-  RETURN
-  *
+RETURN
+*
 PARSE.PROG.COM:
   PROG.NUM = NUL
   F = FIELD(ANS,SPC,1);L = LEN(F);I = L
@@ -714,8 +716,8 @@ PARSE.PROG.COM:
   PROG = PROGRAMS<PROG.NUM>
   B.FILE = FIELD(PROG,SPC,1)
   B.ITEM = FIELD(PROG,SPC,2)
-  RETURN
-  *
+RETURN
+*
 GET.PROG.NAME:
   X = 15;DISP.LEN = 30;LEN = LONG.LINE;ENTRY = PROG
   PRINT 'Program Name :':
@@ -734,8 +736,8 @@ GET.PROG.NAME:
       B.FILE = WORK.FILE ; B.ITEM = ANS ; PROG = B.FILE:SPC:B.ITEM
     END
   END
-  RETURN
-  *
+RETURN
+*
 PRINT.PROG.INFO:
   I = DCOUNT(PROGRAMS,@AM)
   PRINT
@@ -763,20 +765,20 @@ PRINT.PROG.INFO:
       PRINT F 'L#5':CH:' ':PROGRAMS<F>
     END
   NEXT F
-  RETURN
-  *
+RETURN
+*
 WRITE.INFO:
   WRITE STACK ON HOME.F, STACK.ITEM
   WRITE ALIASES ON HOME.F, ALIAS.ITEM
   WRITE PROGRAMS ON HOME.F, PROGRAM.ITEM
   WRITE SETTINGS ON HOME.F, SETTING.ITEM
-  RETURN
-  *
+RETURN
+*
 UPDATE.STACK:
   INS ACC:@VM:DATE():@VM:TIME():@VM:ANS BEFORE STACK<1>
   WRITE STACK ON HOME.F, STACK.ITEM
-  RETURN
-  *
+RETURN
+*
 WP.EDIT:
   * Edit a record using a visual editor (e.g. vi, joe or emacs)
   DICT=0
@@ -809,8 +811,8 @@ WP.EDIT:
     WRITE R ON T, WP.ITEM
     CLOSE T
   END
-  RETURN
-  *
+RETURN
+*
 CONV:
   * Handy way to check ICONV/OCONV data
   LOOP
@@ -822,8 +824,8 @@ CONV:
     PRINT 'Result:':
     IF CONV='I' THEN PRINT ICONV(DTA,MASK) ELSE PRINT OCONV(DTA,MASK)
   REPEAT
-  RETURN
-  *
+RETURN
+*
 PIVOT:
   * Profile a field, e.g. PIVOT LS.MASTER LESSOR GROSS.CONTRACT EQUIPMENT.COST
   FILE=FIELD(ANS," ",2) ; ATB =FIELD(ANS," ",3) ; ATB2=FIELD(ANS," ",4) ; ATB3=FIELD(ANS," ",5) ; ATB4=FIELD(ANS," ",6)
@@ -839,8 +841,8 @@ PIVOT:
   IF ATB4 # "" THEN EX:= \ TOTAL \:ATB4
   EX:= \ (IDH \
   EXECUTE EX
-  RETURN
-  *
+RETURN
+*
 DDD:
   * List the DICT, e.g DDD AS.MASTER EQUIP
   FILE = FIELD(ANS," ",2)
@@ -848,8 +850,8 @@ DDD:
   FIND.STR=""
   IF SSTR # "" THEN FIND.STR = \WITH @ID = "[\:SSTR:\]" \
   EXECUTE \SORT DICT \:FILE:\ @ID F1 F2 BY F1 BY F2 \:FIND.STR:\ USING DICT VOC (I \
-  RETURN
-  *
+RETURN
+*
 SEARCH.FILE:
   FILE = FIELD(ANS," ",2)
   ICTR=3
@@ -897,8 +899,8 @@ SEARCH.FILE:
     IF CTR/20=INT(CTR/20) THEN GOSUB SEARCH.FILE.PROMPT
     IF QUIT THEN RETURN
   REPEAT
-  RETURN
-  *
+RETURN
+*
 SEARCH.FILE.PROMPT:
   PRINT ; PRINT 'B)ack, E)dit #, V)iew #, W)P#, /:':
   INPUT OPTION
@@ -928,8 +930,8 @@ SEARCH.FILE.PROMPT:
       QUIT=1
   END CASE
   PRINT HDR
-  RETURN
-  *
+RETURN
+*
 BPI:
   FILE=FIELD(ANS,' ',2)
   IF FILE='' THEN PRINT 'Usage: BPI <name of infolease file>' ; RETURN
@@ -940,8 +942,8 @@ BPI:
   BPI=FIELD(BPI,' ',N-1)
   EXECUTE \AE IL.BPI \:BPI
   CLOSE IL
-  RETURN
-  *
+RETURN
+*
 BFORMAT:
   STAR  = '*' ; COLON = ':' ; TAB=CHAR(9)
   IND = 0
@@ -981,8 +983,8 @@ BFORMAT:
   NEXT F
   WRITE REC ON FI,B.ITEM
   PRINT STAR ; PRINT I:" lines of ":B.ITEM:" formatted"
-  RETURN
-  *
+RETURN
+*
 FORMAT.LINE:
   L=TRIM(L,' ','B')
   CONVERT TAB TO "" IN L
@@ -1035,7 +1037,7 @@ FORMAT.LINE:
       END
     CASE FIRST.WORD = "FOR" AND NEXT.TO.LAST.WORD = "NEXT"
       * FOR loop on one line means do nothing
-    CASE FIRST.WORD = "RETURN" AND NEXT.LINE # ""
+    CASE FIRST.WORD = "RETURN" AND TRIM(NEXT.LINE) # "*"
       * RETURN without a blank line means do nothing
     CASE 1
       LOCATE FIRST.WORD IN FORMATS<1> SETTING POS ELSE POS = 0
@@ -1048,3 +1050,354 @@ FORMAT.LINE:
   *L = STR(TAB,IND+THIS.IND):L
   IND = IND + NEXT.IND
 RETURN
+*
+GET.LINE:
+  * SUBROUTINE GET.LINE(X,LEN,DISP.LEN,XXDATA,RTN.CHAR)
+  * X           = X POS
+  * LEN         = MAX ALLOWED LENGTH
+  * DISP.LEN    = MAX DISPLAYED LEN
+  * XXDATA      = ON INPUT  VARIABLE XXDATA
+  *             = ON OUTPUT RETURNED STRING
+  * RTN.CHAR    = SEQ(CHAR PRESSED TO EXIT)
+  * -----------------
+  * Important globals
+  * CP          = Cursor Position, Y coordinate on the screen 0 -> DISP.LEN
+  * CH.PTR      = Pointer into string being edited            1 -> LEN
+  * POS         = Pointer to first char currently displayed   1 -> LEN
+  * ASC.CH      = The numeric value of the key just entered
+  *
+  ECHO OFF
+  XXDATA = ENTRY
+  MODE = INSERT ; TEMP.XXDATA = XXDATA
+  BASE = @(X) ; MASK = 'L#':DISP.LEN
+  PRINT BASE:
+  CURR.LEN = LEN(XXDATA)
+  GOSUB GO.END
+  RTN.CHAR=''
+  *
+  LOOP
+    PRINT @(X+CP):
+    CH=IN()
+    ASC.CH = SEQ(CH)
+    EXIT.FLAG=FALSE
+    BEGIN CASE
+      CASE ASC.CH = 1
+        GOSUB GO.BEGIN
+      CASE ASC.CH = 2
+        GOSUB LEFT
+      CASE ASC.CH = 4
+        GOSUB DEL
+      CASE ASC.CH = 5
+        GOSUB GO.END
+      CASE ASC.CH = 6
+        GOSUB RIGHT
+      CASE ASC.CH = 8 AND TERM='W'
+        GOSUB LEFT
+      CASE ASC.CH = 8
+        GOSUB BACK
+      CASE ASC.CH = 9
+        GOSUB FORWARD.WORD
+      CASE ASC.CH = 10 AND TERM='W'
+        RTN.CHAR=2
+        EXIT.FLAG=TRUE
+      CASE ASC.CH = 10
+        GOSUB DEL.TO.END
+      CASE ASC.CH=11 AND TERM='W'
+        RTN.CHAR=1
+        EXIT.FLAG=TRUE
+      CASE ASC.CH=12 AND TERM='W'
+        GOSUB RIGHT
+      CASE ASC.CH = 13
+        EXIT.FLAG = TRUE
+        RTN.CHAR=13
+      CASE ASC.CH = 14
+        RTN.CHAR=2
+        EXIT.FLAG=TRUE
+      CASE ASC.CH = 16
+        RTN.CHAR=1
+        EXIT.FLAG=TRUE
+      CASE ASC.CH = 18
+        GOSUB INSRT
+      CASE ASC.CH = 23
+        GOSUB DELETE.WORD
+      CASE ASC.CH = 24
+        GOSUB FORWARD.WORD
+      CASE ASC.CH = 7 OR ASC.CH = 12
+        IF ASC.CH = 12 THEN PRINT @(-1):
+        XXDATA = ''
+        EXIT.FLAG=TRUE
+        RTN.CHAR=13
+      CASE ASC.CH = 26
+        GOSUB BACK.WORD
+      CASE ASC.CH = 27
+        GOSUB ESC.KEY
+      CASE ASC.CH < 27
+        PRINT @(0):ASC.CH:
+      CASE ASC.CH = 127
+        GOSUB BACK
+      CASE 1
+        GOSUB ORD
+    END CASE
+    CURR.LEN = LEN(XXDATA)
+  UNTIL EXIT.FLAG DO
+  REPEAT
+  IF XXDATA[CURR.LEN,1] = SPC THEN XXDATA = XXDATA[1,CURR.LEN-1]
+  ECHO ON ; PRINT BASE:XXDATA MASK
+  ENTRY=XXDATA
+RETURN
+*
+ORD:
+  * Ordinary key pressed
+  IF CH.PTR # LEN+1 THEN
+    IF MODE = INSERT THEN
+      IF CURR.LEN = LEN THEN
+        PRINT BEEP:
+        GOTO SKIP1
+      END ELSE
+        XXDATA = XXDATA[1,CH.PTR-1]:CH:XXDATA[CH.PTR,CURR.LEN]
+      END
+    END ELSE
+      XXDATA = XXDATA[1,CH.PTR-1]:CH:XXDATA[CH.PTR+1,CURR.LEN]
+    END
+    CH.PTR = CH.PTR + 1
+    IF CP # DISP.LEN THEN
+      PRINT @(X+CP):CH:
+      IF MODE = INSERT THEN
+        PRINT XXDATA[CH.PTR,DISP.LEN-CP-1]:
+      END
+      CP = CP + 1
+    END ELSE
+      POS = POS + 1
+      PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+    END
+  END ELSE
+    PRINT BEEP:
+  END
+SKIP1:
+RETURN
+*
+RIGHT:
+  * There are 3 situations here -
+  * 1 We're pressing the right arrow thru existing text       (CH.PTR = CURR.LEN)
+  * 2 We've typed text and are at the end when we press right (CH.PTR > CURR.LEN)
+  * 3 We're in the middle of text, pressing the right arrow   (CH.PTR < CURR.LEN)
+  IF CH.PTR < LEN THEN
+    IF CH.PTR > CURR.LEN THEN PRINT BEEP: ; GOTO SKIP2
+    IF CH.PTR = CURR.LEN THEN
+      * If the last char is not a space make it one
+      IF XXDATA[CURR.LEN,1] # SPC THEN
+        XXDATA = XXDATA:SPC
+        IF CP # DISP.LEN THEN PRINT @(X+CP+1):SPC:
+        CURR.LEN = CURR.LEN + 1
+      END ELSE
+        PRINT BEEP:
+        GOTO SKIP2
+      END
+    END
+    CH.PTR = CH.PTR + 1
+    IF CP # DISP.LEN THEN
+      * We're not at the end of display so just move the cursor
+      CP = CP + 1
+    END ELSE
+      * We are at the end of the display so leave cursor where
+      * it is and scroll through line
+      POS = POS + 1
+      PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+    END
+  END ELSE
+    PRINT BEEP:
+  END
+SKIP2:
+RETURN
+*
+FORWARD.WORD:
+  * Tab key pressed - move forwards a word
+  IF CH.PTR >= CURR.LEN THEN
+    PRINT BEEP:
+  END ELSE
+    LOOP
+      CH.PTR = CH.PTR + 1
+      CP = CP + 1
+    UNTIL XXDATA[CH.PTR,1] = SPC OR CH.PTR = CURR.LEN DO
+    REPEAT
+    IF CH.PTR # CURR.LEN THEN
+      LOOP
+        CH.PTR = CH.PTR + 1
+        CP = CP + 1
+      UNTIL XXDATA[CH.PTR,1] # SPC OR CH.PTR = CURR.LEN DO
+      REPEAT
+    END
+    IF CP > DISP.LEN THEN
+      CP = DISP.LEN
+      POS = CH.PTR - DISP.LEN
+      PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+    END
+  END
+RETURN
+*
+LEFT:
+  * If we're not at the start of data, move left
+  IF CH.PTR # 1 THEN
+    CH.PTR = CH.PTR - 1
+    IF CP # 0 THEN
+      * We're not at the start of the display so just move the cursor
+      CP = CP - 1
+    END ELSE
+      * We are at the start of the display so leave cursor and scroll
+      POS = POS - 1
+      PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+    END
+  END ELSE
+    PRINT BEEP:
+  END
+RETURN
+*
+DEL:
+  * Delete the character at the cursor and redisplay from this point
+  XXDATA = XXDATA[1,CH.PTR-1]:XXDATA[CH.PTR+1,CURR.LEN]
+  CURR.LEN = CURR.LEN - 1
+  PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+RETURN
+*
+BACK:
+  * Backspace key pressed
+  IF CH.PTR # 1 THEN
+    CH.PTR = CH.PTR - 1
+    XXDATA = XXDATA[1,CH.PTR-1]:XXDATA[CH.PTR+1,CURR.LEN]
+    CURR.LEN = CURR.LEN - 1
+    IF CP # 0 THEN
+      CP = CP - 1
+    END ELSE
+      POS = POS - 1
+    END
+    PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+  END ELSE
+    PRINT BEEP:
+  END
+RETURN
+*
+INSRT:
+  * Toggle between insert and replace modes
+  MODE = -MODE
+RETURN
+*
+ESC.KEY:
+  * ESC pressed, or extended key - wyse50 arrow keys
+  * Get next char of extended command
+  ALLOW = 0
+  EXT.KEY=IN()
+  EXT = SEQ(EXT.KEY)
+  EXT.KEY = OCONV(EXT.KEY,'MCU')
+  BEGIN CASE
+    CASE EXT.KEY = 'D'
+      GOSUB DELETE.WORD
+    CASE EXT.KEY = '[' OR EXT.KEY = 'O'
+      EXT.KEY=IN()
+      BEGIN CASE
+        CASE EXT.KEY = 'C'
+          GOSUB RIGHT
+        CASE EXT.KEY = 'D'
+          GOSUB LEFT
+        CASE EXT.KEY = 'A'
+          RTN.CHAR=1
+          EXIT.FLAG=TRUE
+        CASE EXT.KEY = 'B'
+          RTN.CHAR=2
+          EXIT.FLAG=TRUE
+      END CASE
+  END CASE
+RETURN ; * From ESC key
+*
+BACK.WORD:
+  * Shift tab pressed - go back a word
+  IF CH.PTR = 1 THEN
+    PRINT BEEP:
+  END ELSE
+    * 2 situations - either we're in a word already or
+    * we're at the start of a word
+    * If in a word - loop to the start of the word
+    * otherwise skip spaces, and then move to start of word
+    IF XXDATA[CH.PTR-1,1] # SPC THEN
+      LOOP
+      UNTIL XXDATA[CH.PTR-1,1] = SPC OR CH.PTR = 1 DO
+        CH.PTR = CH.PTR - 1
+        CP = CP - 1
+      REPEAT
+    END ELSE
+      * Skip spaces
+      LOOP
+      UNTIL XXDATA[CH.PTR-1,1] # SPC OR CH.PTR = 1 DO
+        CH.PTR = CH.PTR - 1
+        CP = CP - 1
+      REPEAT
+      IF CH.PTR > 1 THEN
+        * At word end - move to start of word
+        LOOP
+        UNTIL XXDATA[CH.PTR-1,1] = SPC OR CH.PTR = 1 DO
+          CH.PTR = CH.PTR - 1
+          CP = CP - 1
+        REPEAT
+      END
+    END
+    IF CP < 0 THEN
+      CP = 0
+      POS = CH.PTR
+      PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+    END
+  END
+RETURN
+*
+DEL.TO.END:
+  * Delete from cursor to end of line
+  IF CH.PTR = 1 THEN
+    XXDATA = ''
+    CP = 0
+    POS = 1
+  END ELSE
+    XXDATA = XXDATA[1,CH.PTR-1]
+  END
+  CURR.LEN = LEN(XXDATA)
+  PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+RETURN
+*
+DELETE.WORD:
+  * Delete to space at right of cursor
+  IF CH.PTR >= CURR.LEN THEN
+    PRINT BEEP:
+  END ELSE
+    C = CH.PTR
+    LOOP
+      C = C + 1
+    UNTIL XXDATA[C,1] = SPC OR C = CURR.LEN DO
+    REPEAT
+    XXDATA = XXDATA[1,CH.PTR-1]:XXDATA[C+1,CURR.LEN]
+    CURR.LEN = CURR.LEN - C + CH.PTR - 1
+    PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+  END
+RETURN
+*
+GO.BEGIN:
+  * Go to the start of data and redisplay
+  CP = 0
+  CH.PTR = 1
+  POS = 1
+  PRINT BASE:XXDATA MASK:
+RETURN
+*
+GO.END:
+  * Move to the end of data and redisplay
+  IF XXDATA[CURR.LEN,1] # SPC THEN
+    XXDATA = XXDATA:SPC
+    CURR.LEN = CURR.LEN + 1
+  END
+  IF CURR.LEN < DISP.LEN THEN
+    CP = CURR.LEN - 1
+    POS = 1
+  END ELSE
+    CP = DISP.LEN - 1
+    POS = CURR.LEN - DISP.LEN + 1
+  END
+  CH.PTR = CURR.LEN
+  PRINT BASE:XXDATA[POS,DISP.LEN] MASK:
+RETURN
+*
