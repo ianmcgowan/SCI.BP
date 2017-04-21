@@ -386,24 +386,35 @@ STACK.COMMAND:
       SETTINGS<13> = X.DISP
       OLD.X.DISP=X.DISP
     CASE ANS = '.H'
-      PRINT 'Ctrl-A     Start of line     Ctrl-R      Toggle insert mode'
-      PRINT 'Ctrl-B     Back one char     Ctrl-W      Delete word'
-      PRINT 'Ctrl-D     Delete char       Ctrl-X      Forward word'
-      PRINT 'Ctrl-E     End of line       Ctrl-Z      Back word'
-      PRINT 'Ctrl-F     Forward char      '
-      PRINT 'Ctrl-G     Cancel line       '
-      PRINT 'Ctrl-I     Forward word      ~xxx        Search for xxx'
-      PRINT 'Ctrl-J     Delete to end     .Lm,n       List entry m thru n'
-      PRINT 'Ctrl-M     Accept line       .Rn         Restore entry n, edit'
-      PRINT 'Ctrl-N     Next line         '
-      PRINT 'Ctrl-P     Previous line     Q           Quit back to TCL'
+      PRINT 'TCL STACK COMMANDS--------------------------------------------'
+      PRINT 'Ctrl-A      Start of line    Ctrl-R      Toggle insert mode'
+      PRINT 'Ctrl-B      Back one char    Ctrl-W      Delete word'
+      PRINT 'Ctrl-D      Delete char      Ctrl-X      Forward word'
+      PRINT 'Ctrl-E      End of line      Ctrl-Z      Back word'
+      PRINT 'Ctrl-F      Forward char     '
+      PRINT 'Ctrl-G      Cancel line      '
+      PRINT 'Ctrl-I      Forward word     ~xyz        Search for xyz'
+      PRINT 'Ctrl-J      Delete to end    '
+      PRINT 'Ctrl-L      Clear screen     .Lm,n       List entry m thru n'
+      PRINT 'Ctrl-M      Accept line      .Rn         Restore entry n, edit'
+      PRINT 'Ctrl-N      Next line        '
+      PRINT 'Ctrl-P      Previous line    Q           Quit back to TCL'
       PRINT
-      PRINT '/   List the program stack   //  List the stack with cvs status'
-      PRINT '/Nx Add a New program,'
+      PRINT 'PROGRAM STACK COMMANDS----------------------------------------'
+      PRINT '/           List the active program stack'
+      PRINT '/LL         List all available program stacks'
+      PRINT '/L BLAH     Switch the program stack to BLAH'
+      PRINT '/Nx Add a New program'
       PRINT '/Ex Edit the x`th program    /WW Edit the program list'
       PRINT '/Wx VI the x`th program      /S  Sort the program stack'
       PRINT '/Bx Compile the x`th program /BR Compile and run'
-      PRINT '/CI Checkin a program to cvs /D  Show diff with cvs version'
+      PRINT
+      PRINT 'UTILITIES-----------------------------------------------------'
+      PRINT 'CI/CM/TM    Contract Inquiry/Maintenance/Table Maintenance'
+      PRINT 'DDD         Search dictionary definitions - DDD LS.MASTER EQUIP'
+      PRINT 'ICONV/OCONV Test format masks/Convert Data'
+      PRINT 'PIVOT       Profile data - PIVOT LS.MASTER LESSOR'
+      PRINT 'SF          Search files and dictionaries - SF DICT LS.MASTER ASSETS'
     CASE ANS = '.U'
       IF MCU.ON THEN MCU.ON = FALSE;PRINT 'upper case off' ELSE MCU.ON = TRUE;PRINT 'UPPER CASE ON'
     CASE OTHERWISE
@@ -814,7 +825,7 @@ CONV:
 PIVOT:
   * Profile a field, e.g. PIVOT LS.MASTER LESSOR GROSS.CONTRACT EQUIPMENT.COST
   FILE=FIELD(ANS," ",2) ; ATB =FIELD(ANS," ",3) ; ATB2=FIELD(ANS," ",4) ; ATB3=FIELD(ANS," ",5) ; ATB4=FIELD(ANS," ",6)
-  OPEN "DICT ":FILE TO DICT ELSE STOP 201,"DICT ":FILE
+  OPEN "DICT ":FILE TO DICT ELSE PRINT "DICT ":FILE:' not a filename' ; RETURN
   READ UREC FROM DICT,"UATB.COUNTER" ELSE
     UREC=\I\;UREC<2>=\"1"\;UREC<4>=\CNTR\;UREC<5>=\8R\;UREC<6>=\S\
     WRITE UREC ON DICT,"UATB.COUNTER"
