@@ -3,33 +3,23 @@
 * Author : Ian McGowan
 * Date   : 06/13/89
 * Version: 1.9.8
-* Comment: Stacks TCL commands
+* Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
 PRINT 'Version 1.9.8'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
 EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
-EQUATE SEARCH TO '~'
-EQUATE UNIX TO '!'
+EQUATE SEARCH TO '~', UNIX TO '!'
 EQUATE BELL TO CHAR(7), OTHERWISE TO 1
 TERM=UPCASE(GETENV("TERM"))
-IF INDEX(TERM,'WY',1) THEN TERM='W'
 CS=@(-1);EOL=@(-4);EOS=@(-3);UP=@(-10)
 PROMPT NUL
-SEL.LIST.OUT = ""
 *
-T='/tmp/':@LOGNAME:'.term'
-EXECUTE \!tput cols > \:T ;* Always returns 80 if you capture
-EXECUTE \!cat \:T CAPTURING TERM.WIDTH
-EXECUTE \!rm \:T
-TERM.WIDTH=TERM.WIDTH<1>
-PRINT 'Term width=':TERM.WIDTH
+GOSUB GET.TERM.WIDTH
 *
 LONG.LINE = 9999;LIST.DET.FLAG=0
 EXECUTING = FALSE;SL.ACTIVE = FALSE
-SELECT.LIST = NUL;OLD.WORD = NUL
-SELECT.STATEMENT=FALSE ; CAP.ACTIVE=FALSE
 *
 PWD=GETENV("PWD")
 I=LEN(PWD) ; ACC=NUL
@@ -54,6 +44,10 @@ OPEN HOME.FILE TO HOME.F ELSE
 END
 OPEN 'CTLGTB' TO CTLGTB ELSE STOP 201,'CTLGTB'
 OPEN 'CTLG'   TO CTLG   ELSE STOP 201,'CTLG'
+OPEN "IL.TB.CHNG.LOG" TO IL.TB.CHNG.LOG ELSE STOP 201,"IL.TB.CHNG.LOG"
+OPEN "IL.CHANGE.LOG.INDEX" TO IL.CHANGE.LOG.INDEX ELSE STOP 201,"IL.CHANGE.LOG.INDEX"
+OPEN "REV.ATB.LOG" TO REV.ATB.LOG ELSE STOP 201,"REV.ATB.LOG"
+OPEN "HELP.TEXT.USA" TO HELP.TEXT.USA ELSE STOP 201,"HELP.TEXT.USA"
 *
 SETTINGS      = ';'        ;* DEFAULT COMMAND SEPERATOR
 SETTINGS<2>   = '.'        ;* DEFAULT STACK CHAR
@@ -198,7 +192,6 @@ DO.COMMAND:
   IF ANS='!' THEN ANS='!':DEF.SHELL
   LEN.ANS = LEN(ANS)
   SEARCH.FOR=NUL
-  SELECT.STATEMENT=FALSE
   CAP.ACTIVE=FALSE
   FIRST.WORD=FIELD(ANS,' ',1)
   BEGIN CASE
@@ -221,7 +214,7 @@ DO.COMMAND:
       DATA 0
       DATA 0
       DATA 0
-      EXECUTE \CMAINT.00\
+      EXEC.LINE=\CMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
     CASE ANS = 'CM'
       * CONTRACT MAINTENANCE
@@ -229,26 +222,26 @@ DO.COMMAND:
       DATA 0
       DATA 0
       DATA 0
-      EXECUTE \CMAINT.00\
+      EXEC.LINE=\CMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
     CASE ANS = 'CCI'
       * CUSTOMER INQUIRY
       DATA 0
       DATA 0
       DATA 0
-      EXECUTE \CDMAINT.00\
+      EXEC.LINE=\CDMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
     CASE ANS = 'CCM'
       * CUSTOMER MAINTENANCE
       DATA 1
       DATA 0
       DATA 0
-      EXECUTE \CDMAINT.00\
+      EXEC.LINE=\CDMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
     CASE ANS = 'TM'
       DATA 1
       DATA 0
-      EXECUTE \TMAINT.00\
+      EXEC.LINE=\TMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
     CASE ANS = 'ICONV'
       CONV='I'
@@ -257,6 +250,7 @@ DO.COMMAND:
       CONV='O'
       GOSUB CONV
     CASE ANS = 'RULER'
+      GOSUB GET.TERM.WIDTH
       GOSUB RULER
     CASE FIRST.WORD = 'PIVOT'
       GOSUB PIVOT
@@ -338,6 +332,7 @@ EXEC.SUB:
     EXECUTE EXEC.LINE
   END
   IF SYSTEM(11) > 0 THEN SL.ACTIVE = TRUE ELSE SL.ACTIVE = FALSE
+  CAP.ACTIVE=FALSE
 RETURN
 *
 EXPAND.PROG.CHARS:
@@ -448,38 +443,36 @@ STACK.COMMAND:
       SETTINGS<13> = X.DISP
       OLD.X.DISP=X.DISP
     CASE ANS = '.H'
-      PRINT 'TCL STACK COMMANDS--------------------------------------------'
-      PRINT 'Ctrl-A      Start of line    Ctrl-R      Toggle insert mode'
-      PRINT 'Ctrl-B      Back one char    Ctrl-U      Page Up'
-      PRINT 'Ctrl-D      Delete char      Ctrl-V      Page Down'
-      PRINT 'Ctrl-E      End of line      Ctrl-W      Delete word'
-      PRINT 'Ctrl-F      Forward char     Ctrl-X      Forward word'
-      PRINT 'Ctrl-G      Cancel line      Ctrl-Z      Back word'
-      PRINT 'Ctrl-I      Forward word     ~xyz        Search for xyz'
-      PRINT 'Ctrl-J      Delete to end    .D          Toggle detail off/on'
-      PRINT 'Ctrl-L      Clear screen     .Lm,n       List entry m thru n'
-      PRINT 'Ctrl-M      Accept line      .Rn         Restore entry n, edit'
-      PRINT 'Ctrl-N      Next line        '
-      PRINT 'Ctrl-P      Previous line    Q           Quit back to TCL'
-      PRINT
-      PRINT 'PROGRAM STACK COMMANDS----------------------------------------'
-      PRINT '/           List the active program stack'
-      PRINT '/LL         List all available program stacks'
-      PRINT '/L BLAH     Switch the program stack to BLAH'
-      PRINT '/Nx Add a New program        /Fx Format the x`th program'
-      PRINT '/Ex Edit the x`th program    /WW Edit the program list'
-      PRINT '/Wx VI the x`th program      /S  Sort the program stack'
-      PRINT '/Bx Compile the x`th program /BR Compile and run'
-      PRINT
-      PRINT 'UTILITIES-----------------------------------------------------'
-      PRINT 'AF          ATB Finder, search definitions - AF MRKTNG'
-      PRINT 'BPI         List table definitions - BPI LS.CTD.PYMTHIST'
+      PRINT '--------------------------- TCL STACK COMMANDS --------------------------------'
+      PRINT 'Ctrl-A      Start of line              Ctrl-R           Toggle insert mode'
+      PRINT 'Ctrl-B      Back one char              Ctrl-U           Page Up'
+      PRINT 'Ctrl-D      Delete char                Ctrl-V           Page Down'
+      PRINT 'Ctrl-E      End of line                Ctrl-W           Delete word'
+      PRINT 'Ctrl-F      Forward char               Ctrl-X           Forward word'
+      PRINT 'Ctrl-G      Cancel line                Ctrl-Z           Back word'
+      PRINT 'Ctrl-I      Forward word               ~xyz             Search for xyz'
+      PRINT 'Ctrl-J      Delete to end              .D               Toggle detail off/on'
+      PRINT 'Ctrl-L      Clear screen               .Lm,n            List entry m thru n'
+      PRINT 'Ctrl-M      Accept line                .Rn              Restore entry n, edit'
+      PRINT 'Ctrl-N      Next line                  .H               Help'
+      PRINT 'Ctrl-P      Previous line              Q/INFO           Quit back to TCL'
+      PRINT '---------------------- PROGRAM STACK COMMANDS ---------------------------------'
+      PRINT '/           List the active prog stack'
+      PRINT '/LL         List available prog stacks /L BLAH          Switch stack to BLAH'
+      PRINT '/Nx         Add a New program          /Fx              Format the x`th program'
+      PRINT '/Ex         Edit the x`th program      /WW              Edit the program list'
+      PRINT '/Wx         VI the x`th program        /S               Sort the program stack'
+      PRINT '/Bx         Compile the x`th program   /BR              Compile and run'
+      PRINT '---------------------------- UTILITIES ----------------------------------------'
+      PRINT 'AF          ATB Finder, search definitions                          - AF MRKTNG'
+      PRINT 'BPI         List table definitions                        - BPI LS.CTD.PYMTHIST'
       PRINT '{C}CI/CM/TM {Customer}Contract Inquiry/Maintenance/Table Maintenance'
-      PRINT 'DDD         Search dictionary definitions - DDD LS.MASTER EQUIP'
+      PRINT 'DDD         Search dictionary definitions                 - DDD LS.MASTER EQUIP'
       PRINT 'ICONV/OCONV Test format masks/Convert Data'
-      PRINT 'PIVOT       Summary data - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
-      PRINT 'PROF        Profile data - PROF LS.MASTER BRANCH NUM.OF.ASSETS BOOKING.DATE'
-      PRINT 'SF          Search files and dictionaries - SF DICT LS.MASTER ASSETS'
+      PRINT 'PIVOT       Summary data                - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
+      PRINT 'PROF        Profile data     - PROF LS.MASTER BRANCH NUM.OF.ASSETS BOOKING.DATE'
+      PRINT 'RULER       Reset term width, show ruler'
+      PRINT 'SF          Search files and dictionaries            - SF DICT LS.MASTER ASSETS'
     CASE ANS = '.U'
       IF MCU.ON THEN MCU.ON = FALSE;PRINT 'upper case off' ELSE MCU.ON = TRUE;PRINT 'UPPER CASE ON'
     CASE OTHERWISE
@@ -644,7 +637,8 @@ PROG.COMMAND:
       SETTINGS<15>=STACK.NAME
     CASE PROG.COM = '/LL'
       * List the different program stacks
-      EXECUTE \SSELECT \:HOME.FILE:\ WITH @ID = ".STACK.PROGRAM]"\
+      EXEC.LINE=\SSELECT \:HOME.FILE:\ WITH @ID = ".STACK.PROGRAM]"\
+      GOSUB EXEC.SUB
       LOOP
         READNEXT ID ELSE EXIT
         PRINT ID
@@ -968,7 +962,8 @@ SEARCH.FILE:
   DATA SSTR2
   DATA SSTR3
   DATA ""
-  EXECUTE \ESEARCH \:FILE:\ WITH @ID # "_]" USING DICT VOC\ CAPTURING DUMMY
+  EXEC.LINE=\ESEARCH \:FILE:\ WITH @ID # "_]" USING DICT VOC\ ; CAP.ACTIVE=TRUE
+  GOSUB EXEC.SUB
   *
   CTR=0 ; FOUND.RECS=''
   LOOP
@@ -987,6 +982,7 @@ SEARCH.FILE:
       END
     END
   REPEAT
+  CLOSE FVAR
   *
   QUIT = 0 ; CTR=1 ; MAX.ITEMS=DCOUNT(FOUND.RECS<1>,@VM)
   IF MAX.ITEMS=0 THEN PRINT SSTR:' Not found' ; RETURN
@@ -1008,7 +1004,8 @@ SEARCH.FILE.PROMPT:
       CTR-=40
       IF CTR<1 THEN CTR=1
     CASE OPTION[1,1]='E'
-      EXECUTE ED.VERB:\ \:FILE:\ \:FOUND.RECS<1,OPTION[2,99]>
+      EXEC.LINE=ED.VERB:\ \:FILE:\ \:FOUND.RECS<1,OPTION[2,99]>
+      GOSUB EXEC.SUB
       CTR-=20
       IF CTR<1 THEN CTR=1
     CASE OPTION[1,1]='W'
@@ -1019,7 +1016,8 @@ SEARCH.FILE.PROMPT:
       IF CTR<1 THEN CTR=1
     CASE OPTION[1,1]='V'
       PRINT CS:
-      EXECUTE \CT \:FILE:\ \:FOUND.RECS<1,OPTION[2,99]>
+      EXEC.LINE=\CT \:FILE:\ \:FOUND.RECS<1,OPTION[2,99]>
+      GOSUB EXEC.SUB
       CTR-=20
       IF CTR<1 THEN CTR=1
       PRINT 'Press ENTER:':
@@ -1044,7 +1042,8 @@ BPI:
     BPI=FIELD(BPI,' ',N-1)
     READ DUMMY FROM IL.BPI, BPI ELSE PRINT 'Cannot get BPI name' ; RETURN
   END
-  EXECUTE \AE IL.BPI \:BPI
+  EXEC.LINE=\AE IL.BPI \:BPI
+  GOSUB EXEC.SUB
   CLOSE IL
   CLOSE IL.BPI
 RETURN
@@ -1088,6 +1087,7 @@ BFORMAT:
   NEXT F
   WRITE REC ON FI,B.ITEM
   PRINT STAR ; PRINT I:" lines of ":B.ITEM:" formatted"
+  CLOSE FI
 RETURN
 *
 FORMAT.LINE:
@@ -1196,22 +1196,12 @@ GET.LINE:
         GOSUB GO.END
       CASE ASC.CH = 6
         GOSUB RIGHT
-      CASE ASC.CH = 8 AND TERM='W'
-        GOSUB LEFT
       CASE ASC.CH = 8
         GOSUB BACK
       CASE ASC.CH = 9
         GOSUB FORWARD.WORD
-      CASE ASC.CH = 10 AND TERM='W'
-        RTN=2
-        EXIT.FLAG=TRUE
       CASE ASC.CH = 10
         GOSUB DEL.TO.END
-      CASE ASC.CH=11 AND TERM='W'
-        RTN=1
-        EXIT.FLAG=TRUE
-      CASE ASC.CH=12 AND TERM='W'
-        GOSUB RIGHT
       CASE ASC.CH = 13
         EXIT.FLAG = TRUE
         RTN=13
@@ -1515,10 +1505,6 @@ RETURN
 ATB.FIND:
   MSK="L#22"
   ATB = FIELD(ANS," ",2)
-  OPEN "IL.TB.CHNG.LOG" TO IL.TB.CHNG.LOG ELSE STOP 201,"IL.TB.CHNG.LOG"
-  OPEN "IL.CHANGE.LOG.INDEX" TO IL.CHANGE.LOG.INDEX ELSE STOP 201,"IL.CHANGE.LOG.INDEX"
-  OPEN "REV.ATB.LOG" TO REV.ATB.LOG ELSE STOP 201,"REV.ATB.LOG"
-  OPEN "HELP.TEXT.USA" TO HELP.TEXT.USA ELSE STOP 201,"HELP.TEXT.USA"
   *
   IF ATB="" THEN
     PRINT "ENTER ATB NAME: ": ; INPUT ATB
@@ -1527,7 +1513,8 @@ ATB.FIND:
   *
   READ AREC FROM REV.ATB.LOG,ATB ELSE
     ATBREC="" ; TEST=""
-    EXECUTE \SSELECT REV.ATB.LOG = "[\:ATB:\]"\
+    EXEC.LINE=\SSELECT REV.ATB.LOG = "[\:ATB:\]"\
+    GOSUB EXEC.SUB
     CTR=0
     LOOP
       READNEXT ID ELSE EXIT
@@ -1579,5 +1566,19 @@ ATB.FIND:
   FOR J=1 TO MAXV
     PRINT HELP.TEXT<2,J>
   NEXT J
+RETURN
+*
+GET.TERM.WIDTH:
+  T='/tmp/':@LOGNAME:'.term'
+  EXEC.LINE=\!tput cols > \:T ;* Always returns 80 if you capture, so use tmp file
+  CAP.ACTIVE=FALSE
+  GOSUB EXEC.SUB
+  EXEC.LINE=\!cat \:T
+  CAP.ACTIVE=TRUE
+  GOSUB EXEC.SUB
+  TERM.WIDTH=EXEC.CAP<1>
+  EXEC.LINE=\!rm \:T
+  GOSUB EXEC.SUB
+  PRINT 'Term width=':TERM.WIDTH
 RETURN
 *
