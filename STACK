@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.8
+* Version: 1.9.9
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.8'
+PRINT 'Version 1.9.9'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -269,6 +269,9 @@ DO.COMMAND:
       GOSUB UPDATE.STACK
     CASE FIRST.WORD = 'AF'
       GOSUB ATB.FIND
+      GOSUB UPDATE.STACK
+    CASE FIRST.WORD = 'PICKLE'
+      GOSUB PICKLE
       GOSUB UPDATE.STACK
     CASE OTHERWISE
       IF NOT(EXECUTING) THEN
@@ -1580,5 +1583,61 @@ GET.TERM.WIDTH:
   EXEC.LINE=\!rm \:T
   GOSUB EXEC.SUB
   PRINT 'Term width=':TERM.WIDTH
+RETURN
+*
+PICKLE:
+  PICKLE.LIST=''
+  *
+  IF FIELD(ANS,' ',2)='DICT' THEN
+    FILE='DICT ':FIELD(ANS,' ',3)
+    ITEM=FIELD(ANS,' ',4)
+  END ELSE
+    FILE=FIELD(ANS,' ',2)
+    ITEM=FIELD(ANS,' ',3)
+  END
+  OPEN FILE TO FVAR ELSE
+    PRINT 'Cannot open ':FILE
+    RETURN
+  END
+  READ REC FROM FVAR, ITEM ELSE
+    PRINT 'Cannot read ':FILE:' ':ITEM
+    RETURN
+  END
+  BLOB='R=""'
+  *
+  IF FILE[1,5]='DICT ' THEN DEL REC<9> ; DEL REC<8> ;* Avoid CD probs
+  INS ITEM BEFORE REC<1>
+  INS FILE BEFORE REC<1>
+  SWAP @AM WITH '#AM#' IN REC
+  SWAP @VM WITH '#VM#' IN REC
+  SWAP @SVM WITH '#SVM#' IN REC
+  IF INDEX(REC,'\',1) THEN
+    SWAP '\' WITH '#134#' IN REC
+  END
+  BLOB<-1>=\S=''\
+  LOOP
+    T=REC[1,70]
+    BLOB<-1>='S:=\':T:'\'
+    REC=REC[71,LEN(REC)]
+  UNTIL LEN(REC)=0 DO
+  REPEAT
+  BLOB<-1>='R<-1>=S'
+  BLOB<-1>='*'
+  *
+  * Write out basic code that when run will recreate the record
+  BLOB<-1>='FOR F=1 TO DCOUNT(R,@AM)'
+  BLOB<-1>='  REC=R<F>'
+  BLOB<-1>='  SWAP "#AM#" WITH @AM IN REC   ; SWAP "#VM#" WITH @VM IN REC'
+  BLOB<-1>='  SWAP "#SVM#" WITH @SVM IN REC ; SWAP "#134#" WITH "\" IN REC'
+  BLOB<-1>='  FILE=REC<1> ; DEL REC<1>'
+  BLOB<-1>='  ITEM=REC<1> ; DEL REC<1>'
+  BLOB<-1>='  PRINT FILE:" ":ITEM:'
+  BLOB<-1>='  OPEN FILE TO FVAR ELSE STOP 201, FILE'
+  BLOB<-1>='  WRITE REC ON FVAR,ITEM ; PRINT "*"'
+  BLOB<-1>='  CLOSE FVAR'
+  BLOB<-1>='NEXT F'
+  FOR I=1 TO DCOUNT(BLOB,@AM)
+    PRINT BLOB<I>
+  NEXT I
 RETURN
 *
