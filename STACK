@@ -372,7 +372,7 @@ RETURN
 *
 EXPAND.PROMPT:
   IF SL.ACTIVE THEN
-    PROMPT.DISP='#RSEL>'
+    PROMPT.DISP='#R':SYSTEM(11):'-SEL>'
     OLD.X.DISP=X.DISP
     X.DISP=-2
   END ELSE
@@ -472,6 +472,7 @@ STACK.COMMAND:
       PRINT '{C}CI/CM/TM {Customer}Contract Inquiry/Maintenance/Table Maintenance'
       PRINT 'DDD         Search dictionary definitions                 - DDD LS.MASTER EQUIP'
       PRINT 'ICONV/OCONV Test format masks/Convert Data'
+      PRINT 'PICKLE      Store data records in prog     - PICKLE DICT LS.MASTER UATB.BIG.ATB'
       PRINT 'PIVOT       Summary data                - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
       PRINT 'PROF        Profile data     - PROF LS.MASTER BRANCH NUM.OF.ASSETS BOOKING.DATE'
       PRINT 'RULER       Reset term width, show ruler'
@@ -1604,16 +1605,11 @@ PICKLE:
     RETURN
   END
   BLOB='R=""'
-  *
   IF FILE[1,5]='DICT ' THEN DEL REC<9> ; DEL REC<8> ;* Avoid CD probs
   INS ITEM BEFORE REC<1>
   INS FILE BEFORE REC<1>
-  SWAP @AM WITH '#AM#' IN REC
-  SWAP @VM WITH '#VM#' IN REC
-  SWAP @SVM WITH '#SVM#' IN REC
-  IF INDEX(REC,'\',1) THEN
-    SWAP '\' WITH '#134#' IN REC
-  END
+  SWAP @AM WITH '#AM#' IN REC   ; SWAP @VM WITH '#VM#' IN REC
+  SWAP @SVM WITH '#SVM#' IN REC ; SWAP '\' WITH '#134#' IN REC
   BLOB<-1>=\S=''\
   LOOP
     T=REC[1,70]
