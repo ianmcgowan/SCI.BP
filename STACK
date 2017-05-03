@@ -387,22 +387,22 @@ EXPAND.PROMPT:
     L = PROMPT.DISP[1,I-1];R = TRIM(PROMPT.DISP[I+2,LONG.LINE])
     BEGIN CASE
       CASE F = 'B'
-        PROMPT.DISP = L:CHAR(7):R
+        PROMPT.DISP = L:CHAR(7):R             
       CASE F = 'A'
-        PROMPT.DISP = L:ACC:R
+        PROMPT.DISP = L:ACC:R                 
       CASE F = 'T'
-        PROMPT.DISP = L:OCONV(TIME(),'MTS'):R
+        PROMPT.DISP = L:OCONV(TIME(),'MTS'):R 
       CASE F = 'D'
-        PROMPT.DISP = L:OCONV(DATE(),'D'):R
+        PROMPT.DISP = L:OCONV(DATE(),'D'):R   
       CASE F = 'E'
-        PROMPT.DISP = L:CHAR(ESC):R
+        PROMPT.DISP = L:CHAR(ESC):R           
       CASE F = 'R'
-        PROMPT.DISP = L:CHAR(13):CHAR(10):R
+        PROMPT.DISP = L:CHAR(13):CHAR(10):R   
       CASE F = '#'
-        PROMPT.DISP = L:'#':R
+        PROMPT.DISP = L:'#':R                 
         CTR = CTR + 1
       CASE F = 'U'
-        PROMPT.DISP = L:USERNAME:R
+        PROMPT.DISP = L:USERNAME:R            
       CASE F = 'H'
         PROMPT.DISP=L:FIELD(HOST.NAME,".",1):R
       CASE OTHERWISE
@@ -1584,6 +1584,7 @@ GET.TERM.WIDTH:
   EXEC.LINE=\!rm \:T
   GOSUB EXEC.SUB
   PRINT 'Term width=':TERM.WIDTH
+  EXEC.LINE=\TERM \:TERM.WIDTH ; GOSUB EXEC.SUB
 RETURN
 *
 PICKLE:
