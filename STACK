@@ -44,10 +44,6 @@ OPEN HOME.FILE TO HOME.F ELSE
 END
 OPEN 'CTLGTB' TO CTLGTB ELSE STOP 201,'CTLGTB'
 OPEN 'CTLG'   TO CTLG   ELSE STOP 201,'CTLG'
-OPEN "IL.TB.CHNG.LOG" TO IL.TB.CHNG.LOG ELSE STOP 201,"IL.TB.CHNG.LOG"
-OPEN "IL.CHANGE.LOG.INDEX" TO IL.CHANGE.LOG.INDEX ELSE STOP 201,"IL.CHANGE.LOG.INDEX"
-OPEN "REV.ATB.LOG" TO REV.ATB.LOG ELSE STOP 201,"REV.ATB.LOG"
-OPEN "HELP.TEXT.USA" TO HELP.TEXT.USA ELSE STOP 201,"HELP.TEXT.USA"
 *
 SETTINGS      = ';'        ;* DEFAULT COMMAND SEPERATOR
 SETTINGS<2>   = '.'        ;* DEFAULT STACK CHAR
@@ -273,6 +269,8 @@ DO.COMMAND:
     CASE FIRST.WORD = 'PICKLE'
       GOSUB PICKLE
       GOSUB UPDATE.STACK
+    CASE ANS='SETTINGS'
+      GOSUB SETTINGS
     CASE OTHERWISE
       IF NOT(EXECUTING) THEN
         GOSUB UPDATE.STACK
@@ -476,6 +474,7 @@ STACK.COMMAND:
       PRINT 'PIVOT       Summary data                - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
       PRINT 'PROF        Profile data     - PROF LS.MASTER BRANCH NUM.OF.ASSETS BOOKING.DATE'
       PRINT 'RULER       Reset term width, show ruler'
+      PRINT 'SETTINGS    Change settings'
       PRINT 'SF          Search files and dictionaries            - SF DICT LS.MASTER ASSETS'
     CASE ANS = '.U'
       IF MCU.ON THEN MCU.ON = FALSE;PRINT 'upper case off' ELSE MCU.ON = TRUE;PRINT 'UPPER CASE ON'
@@ -1521,6 +1520,10 @@ GO.END:
 RETURN
 *
 ATB.FIND:
+  OPEN "IL.TB.CHNG.LOG" TO IL.TB.CHNG.LOG ELSE STOP 201,"IL.TB.CHNG.LOG"
+  OPEN "IL.CHANGE.LOG.INDEX" TO IL.CHANGE.LOG.INDEX ELSE STOP 201,"IL.CHANGE.LOG.INDEX"
+  OPEN "REV.ATB.LOG" TO REV.ATB.LOG ELSE STOP 201,"REV.ATB.LOG"
+  OPEN "HELP.TEXT.USA" TO HELP.TEXT.USA ELSE STOP 201,"HELP.TEXT.USA"
   MSK="L#22"
   ATB = FIELD(ANS," ",2)
   *
@@ -1650,5 +1653,139 @@ PICKLE:
   FOR I=1 TO DCOUNT(BLOB,@AM)
     PRINT BLOB<I>
   NEXT I
+RETURN
+*
+SETTINGS:
+  PRINT CS:'Hit ENTER to accept the current default, / to Cancel'
+  X=18
+  LEN=30
+  DISP.LEN=30
+  *
+  PRINT
+  PRINT 'The command seperator is used to run multiple commands from one entry'
+  PRINT 'E.g. COUNT VOC ; COUNT VOC WITH F1 = "C" will run both count commands'
+  PRINT 'Current value:':SETTINGS<1>
+  PRINT 'COMMAND SEPERATOR:':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<1>
+  SETTINGS<1>=ENTRY
+  *
+  PRINT
+  PRINT 'The stack character is what to prefix command stack operations with'
+  PRINT 'E.g. .L or .R87 or .D uses a stack character of "."'
+  PRINT 'Current value:':SETTINGS<2>
+  PRINT 'STACK CHAR       :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<2>
+  SETTINGS<2>=ENTRY
+  *
+  PRINT
+  PRINT 'The program character is what to prefix program stack operations with'
+  PRINT 'E.g. /W2 or /B3 or /L uses a program character of "/"'
+  PRINT 'Current value:':SETTINGS<3>
+  PRINT 'PROG CHAR        :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<3>
+  SETTINGS<3>=ENTRY
+  *
+  PRINT
+  PRINT 'Max lines is the maximum number of lines to hold in the command stack'
+  PRINT 'E.g. 9999'
+  PRINT 'Current value:':SETTINGS<4>
+  PRINT 'MAX # LINES      :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<4>
+  SETTINGS<4>=ENTRY
+  *
+  PRINT
+  PRINT 'Screen editor is what command to run to edit a program visually'
+  PRINT 'E.g. VI or !emacs or !/home/dsiroot/joe'
+  PRINT 'Current value:':SETTINGS<5>
+  PRINT 'SCREEN EDITOR    :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<5>
+  SETTINGS<5>=ENTRY
+  *
+  PRINT
+  PRINT 'Line editor is what command to run to edit a program'
+  PRINT 'E.g. AE or ED'
+  PRINT 'Current value:':SETTINGS<6>
+  PRINT 'LINE EDITOR      :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<6>
+  SETTINGS<6>=ENTRY
+  *
+  PRINT
+  PRINT 'Header string is not currently used'
+  PRINT 'HEADER STRING    :':SETTINGS<7>
+  *
+  PRINT
+  PRINT 'Use enhanced input commands, allowing editing with arrow keys'
+  PRINT 'Or just use plain INPUT command'
+  PRINT 'Current value:':SETTINGS<8>
+  PRINT 'USE GET.LINE SUBR:':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<8>
+  IF ENTRY='Y' OR ENTRY='1' THEN ENTRY='1' ELSE ENTRY='0'
+  SETTINGS<8>=ENTRY
+  *
+  PRINT
+  PRINT 'Default file for basic programs if none specifed'
+  PRINT 'E.g. BP'
+  PRINT 'Current value:':SETTINGS<9>
+  PRINT 'WORK FILE        :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<9>
+  IF ENTRY='Y' OR ENTRY='1' THEN ENTRY='1' ELSE ENTRY='0'
+  SETTINGS<9>=ENTRY
+  *
+  PRINT
+  PRINT 'Convert commands to upper case before running'
+  PRINT 'E.g. 1 or 0, Y or N'
+  PRINT 'Current value:':SETTINGS<10>
+  PRINT 'CONVERT TO UCASE :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<9>
+  IF ENTRY='Y' OR ENTRY='1' THEN ENTRY='1' ELSE ENTRY='0'
+  SETTINGS<9>=ENTRY
+  *
+  PRINT
+  PRINT 'Command to run when stack first starts'
+  PRINT 'E.g. LISTUSER ; WHO'
+  PRINT 'Current value:':SETTINGS<11>
+  PRINT 'STARTUP COMMAND  :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<11>
+  SETTINGS<11>=ENTRY
+  *
+  PRINT
+  PRINT 'Default Prompt to display, use .P to change this'
+  PRINT 'PROMPT           :':SETTINGS<12>
+  PRINT
+  PRINT 'Adjustment for input position (if you use #R, then CR+LF is inserted,'
+  PRINT 'and an adjustment of -2 is needed.  Use .P to change this'
+  PRINT 'X DISP FOR PROMPT:':SETTINGS<13>
+  *
+  PRINT
+  PRINT 'Default shell to use with !command'
+  PRINT 'E.g. ksh, bash, /usr/bin/ksh, /opt/freeware/bin/bash'
+  PRINT 'Current value:':SETTINGS<14>
+  PRINT 'SHELL            :':
+  INPUT ENTRY
+  IF ENTRY = '/' THEN RETURN
+  IF ENTRY = ''  THEN ENTRY=SETTINGS<14>
+  SETTINGS<14>=ENTRY
+  *
+  WRITE SETTINGS ON HOME.F, SETTING.ITEM
 RETURN
 *
