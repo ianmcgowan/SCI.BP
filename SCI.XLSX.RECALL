@@ -61,6 +61,7 @@ STOP
 *
 XLS.BODY:
   L='<x:row>' ; GOSUB WRITE.LINE
+  CONVERT @VM TO "|" IN ROW ;* Flatten any multivalued fields
   CONVERT '^' TO @VM IN ROW
   FOR C=1 TO DCOUNT(ROW<1>,@VM)
     CELL=ROW<1,C>
