@@ -5,6 +5,7 @@
 * Version: 1.0
 * Comment: List Infolease users logged into this account
 ********************************************************************************
+PROMPT ''
 OPEN 'ACC' TO ACC ELSE STOP 201,'ACC'
 SELECT ACC
 USER.REC=''
@@ -14,7 +15,7 @@ LOOP
     USER=REC<5>
     DATE=REC<2>
     TIME=REC<3>
-    LOCATE USER IN USER.REC<1> BY 'AL' SETTING POS ELSE NULL
+    LOCATE PORT IN USER.REC<4> BY 'AR' SETTING POS ELSE NULL
     INS USER BEFORE USER.REC<1,POS>
     INS DATE BEFORE USER.REC<2,POS>
     INS TIME BEFORE USER.REC<3,POS>
@@ -25,8 +26,8 @@ GOSUB GET.LOCKS
 *
 CALL SCI.SCREEN.HDR('LISTA','List Current Users')
 PRINT
-PRINT 'PORT':' ':'USER''L#12':' ':'DATE''R#10':' ':'TIME''R#8':' ':
-PRINT 'TIME ON''L#8':' ':'LOCKS''L#20'
+PRINT 'Port':' ':'User''L#12':' ':'Date''R#10':' ':'Time''R#8':' ':
+PRINT 'Time On''L#8':' ':'Locks''L#20'
 PRINT '----':' ':STR('-',12):' ':STR('-',10):' ':STR('-',8):' ':
 PRINT STR('-',8):' ':STR('-',20)
 FOR F=1 TO DCOUNT(USER.REC<1>,@VM)
@@ -39,15 +40,25 @@ FOR F=1 TO DCOUNT(USER.REC<1>,@VM)
   PRINT DUR'MTS':' ':
   PRINT USER.REC<5,F>'L#20'
 NEXT F
-PRINT ; PRINT 'Show locks? (Y/N):':
-INPUT YORN
+YORN='N'
+IF LOCK.LIST # '' THEN
+  PRINT ; PRINT 'Show locks? (Y/N):':
+  INPUT YORN
+END
 IF YORN = 'Y' THEN
+  PRINT
+  PRINT 'Table''L#20':' ':'ID''L#20':' ':'P''R#3':' ':
+  PRINT 'Date''R#10':' ':'Time''R#8':' ':'User''L#15'
+  PRINT STR('-',20):' ':STR('-',20):' ':STR('-',3):' ':
+  PRINT STR('-',10):' ':STR('-',8):' ':STR('-',15)
   FOR L=1 TO DCOUNT(LOCK.LIST<1>,@VM)
     FILE=FIELD(LOCK.LIST<1,L>,',',2)
     PRINT FILE'L#20':' ':LOCK.LIST<2,L>'L#20':' ':LOCK.LIST<3,L>'R#3':' ':
-    PRINT LOCK.LIST<4,L>'D4/':' ':LOCK.LIST<5,L>'MTS':' ':LOCK.LIST<6,L>
+    PRINT LOCK.LIST<4,L>'D4/':' ':LOCK.LIST<5,L>'MTS':' ':LOCK.LIST<6,L>'L#15'
   NEXT L
 END
+PRINT ; PRINT '[ENTER] to return to menu:':
+INPUT AAA
 STOP
 *
 GET.LOCKS:
