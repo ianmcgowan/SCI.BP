@@ -1,0 +1,110 @@
+********************************************************************************
+* Program: LISTA
+* Author : MCGOWJ01
+* Date   : 2017-05-25
+* Version: 1.0
+* Comment: List Infolease users logged into this account
+********************************************************************************
+OPEN 'ACC' TO ACC ELSE STOP 201,'ACC'
+SELECT ACC
+USER.REC=''
+LOOP
+  READNEXT PORT ELSE EXIT
+  READ REC FROM ACC, PORT THEN
+    USER=REC<5>
+    DATE=REC<2>
+    TIME=REC<3>
+    LOCATE USER IN USER.REC<1> BY 'AL' SETTING POS ELSE NULL
+    INS USER BEFORE USER.REC<1,POS>
+    INS DATE BEFORE USER.REC<2,POS>
+    INS TIME BEFORE USER.REC<3,POS>
+    INS PORT BEFORE USER.REC<4,POS>
+  END
+REPEAT
+GOSUB GET.LOCKS
+*
+CALL SCI.SCREEN.HDR('LISTA','List Current Users')
+PRINT
+PRINT 'PORT':' ':'USER''L#12':' ':'DATE''R#10':' ':'TIME''R#8':' ':
+PRINT 'TIME ON''L#8':' ':'LOCKS''L#20'
+PRINT '----':' ':STR('-',12):' ':STR('-',10):' ':STR('-',8):' ':
+PRINT STR('-',8):' ':STR('-',20)
+FOR F=1 TO DCOUNT(USER.REC<1>,@VM)
+  DUR=TIME()-USER.REC<3,F>
+  IF DUR<0 THEN DUR+=86400 ;* Roll over midnight, add back number of seconds in a day
+  PRINT USER.REC<4,F>'R#4':' ':
+  PRINT USER.REC<1,F>'L#12':' ':
+  PRINT USER.REC<2,F>'D4/':' ':
+  PRINT USER.REC<3,F>'MTS':' ':
+  PRINT DUR'MTS':' ':
+  PRINT USER.REC<5,F>'L#20'
+NEXT F
+PRINT ; PRINT 'Show locks? (Y/N):':
+INPUT YORN
+IF YORN = 'Y' THEN
+  FOR L=1 TO DCOUNT(LOCK.LIST<1>,@VM)
+    FILE=FIELD(LOCK.LIST<1,L>,',',2)
+    PRINT FILE'L#20':' ':LOCK.LIST<2,L>'L#20':' ':LOCK.LIST<3,L>'R#3':' ':
+    PRINT LOCK.LIST<4,L>'D4/':' ':LOCK.LIST<5,L>'MTS':' ':LOCK.LIST<6,L>
+  NEXT L
+END
+STOP
+*
+GET.LOCKS:
+  LOCK.LIST=''
+  FLIST=''
+  FLIST<-1>='AS.FEATURE'
+  FLIST<-1>='AS.MASTER'
+  FLIST<-1>='AUVB.PARAMETER'
+  FLIST<-1>='BQ.PARAMETER'
+  FLIST<-1>='CS.MASTER'
+  FLIST<-1>='DATA.MASKING.PARAMETER'
+  FLIST<-1>='DB.RECORD.LOCKS'
+  FLIST<-1>='DE.MASTER'
+  FLIST<-1>='FIELD.SECURITY'
+  FLIST<-1>='INFO-SYSTEM'
+  FLIST<-1>='IT.INSURANCE'
+  FLIST<-1>='IT.INSURANCE.AGENT'
+  FLIST<-1>='LS.BANK.DEPOSIT'
+  FLIST<-1>='LS.DISCOUNT.PACKAGE'
+  FLIST<-1>='LS.DISCOUNT.WORKSHEET'
+  FLIST<-1>='LS.GL.HISTORY'
+  FLIST<-1>='LS.MASTER'
+  FLIST<-1>='LS.POST.DATED.CHECK'
+  FLIST<-1>='LS.SUPER.QUOTE'
+  FLIST<-1>='LS.WK.CASH'
+  FLIST<-1>='MISC'
+  FLIST<-1>='MM.GROUP'
+  FLIST<-1>='PARAMETER'
+  FLIST<-1>='PROCESSOR.PARAMETER'
+  FLIST<-1>='TRED.FUTURE.PROC.DATES'
+  FLIST<-1>='USERS.MENUS'
+  FLIST<-1>='WL.FOLLOW.UP'
+  FLIST<-1>='WL.PARAMETER'
+  FOR G=1 TO DCOUNT(FLIST,@AM)
+    FILE='DB.RECORD.LOCKS,':FLIST<G>
+    PRINT FILE
+    OPEN FILE TO FVAR THEN
+      SELECT FVAR
+      LOOP
+        READNEXT LOCK.ID ELSE EXIT
+        READ REC FROM FVAR, LOCK.ID THEN
+          PORT=REC<1>
+          DATE=REC<2>
+          TIME=REC<3>
+          USER=REC<4>
+          LOCK.LIST<1,-1>=FILE
+          LOCK.LIST<2,-1>=LOCK.ID
+          LOCK.LIST<3,-1>=PORT
+          LOCK.LIST<4,-1>=DATE
+          LOCK.LIST<5,-1>=TIME
+          LOCK.LIST<6,-1>=USER
+          LOCATE PORT IN USER.REC<4> SETTING POS THEN
+            USER.REC<5,POS>=LOCK.ID:',':USER.REC<5,POS>
+          END
+        END
+      REPEAT
+      CLOSE FVAR
+    END
+  NEXT G
+RETURN
