@@ -126,7 +126,7 @@ FORMAT.LINE:
       END
     CASE FIRST.WORD = "FOR" AND NEXT.TO.LAST.WORD = "NEXT"
       * FOR loop on one line means do nothing
-    CASE FIRST.WORD = "RETURN" AND NEXT.LINE # ""
+    CASE FIRST.WORD = "RETURN" AND TRIM(NEXT.LINE) # "*"
       * RETURN without a blank line means do nothing
     CASE 1
       LOCATE FIRST.WORD IN FORMATS<1> SETTING POS ELSE POS = 0
@@ -148,4 +148,4 @@ TRIM.LINE:
   XXLENGTH = LEN(L)
   FOR J = XXLENGTH TO 1 STEP -1 UNTIL L[J,1] # SPACE ; NEXT J
   L = L[1,J]
-RETURN
+  RETURN

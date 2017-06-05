@@ -1,0 +1,41 @@
+***************************************************************************
+* Program: BLOCK.USERS
+* Author : MCGOWJ01
+* Date   : 2017 04 10
+* Edited : 
+* Comment: 
+***************************************************************************
+* LOG DATE   BY           CHANGE
+* ---------- ------------ -------------------------------------------------
+PROMPT ''
+OPEN 'VOC' TO VOC ELSE STOP 201,'VOC' ;* Bigger problems if this fails ;_)
+READ BLOCK.MESSAGE FROM VOC,'BLOCK.USERS.MESSAGE' ELSE STOP
+IF BLOCK.MESSAGE<1> # "ON" THEN STOP
+* This is the unix ID of the allowed users
+OPEN 'DLL.PARAMETERS' TO DLL.PARAMETERS ELSE
+  EXECUTE \!mkdir -p /info/automation/GLOBAL/PARAMETERS\
+  R='DIR'
+  R<2>='/info/automation/GLOBAL/PARAMETERS'
+  R<3>='D_VOC'
+  WRITE R ON VOC, 'DLL.PARAMETERS'
+  OPEN 'DLL.PARAMETERS' TO DLL.PARAMETERS ELSE STOP 'CANNOT OPEN OR CREATE DLL.PARAMETERS'
+END
+READ ALLOWED.USERS FROM DLL.PARAMETERS,'BLOCK.USERS.EXCEPTION' ELSE ALLOWED.USERS=''
+PRINT @(-1):
+PRINT 'Account Blocked'
+PRINT '---------------'
+PRINT 'Blocked by:':BLOCK.MESSAGE<3>
+PRINT 'On        :':BLOCK.MESSAGE<4>
+PRINT
+FOR F=1 TO DCOUNT(BLOCK.MESSAGE<2>,@VM)
+  PRINT BLOCK.MESSAGE<2,F>
+NEXT F
+PRINT
+PRINT 'Press ENTER:':
+INPUT AAA
+EXCEPTION=''
+UNIX.NAME=UPCASE(@LOGNAME)
+IF UNIX.NAME='DSIROOT' OR UNIX.NAME='IDSROOT' THEN EXCEPTION='DSIROOT'
+LOCATE UNIX.NAME IN ALLOWED.USERS SETTING POS THEN EXCEPTION='ALLOWED'
+IF EXCEPTION#'' THEN STOP 'EXCEPTION - ':EXCEPTION
+EXECUTE 'OFF'

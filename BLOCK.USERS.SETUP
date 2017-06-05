@@ -1,0 +1,28 @@
+***************************************************************************
+* Program: BLOCK.USERS.SETUP
+* Author : MCGOWJ01
+* Date   : 2017 04 10
+* Edited : 
+* Comment: Do not allow login if account blocked 
+***************************************************************************
+* LOG DATE   BY           CHANGE
+* ---------- ------------ -------------------------------------------------
+S=@SENTENCE
+USAGE='Usage: BLOCK.USERS.SETUP ON|OFF MESSAGE TO DISPLAY TO USERS'
+ON.OFF=FIELD(S,' ',2)
+IF ON.OFF # 'ON' AND ON.OFF # 'OFF' THEN STOP USAGE
+MSG=FIELD(S,' ',3,99)
+IF MSG='' THEN STOP USAGE
+OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
+READ R FROM VOC, 'BLOCK.USERS.MESSAGE' ELSE R=''
+R<5,-1>=R<1>
+R<6,-1>=R<2>
+R<7,-1>=R<3>
+R<8,-1>=R<4>
+R<1>=ON.OFF
+R<2>=MSG
+R<3>=@LOGNAME
+R<4>=TIMEDATE()
+WRITE R ON VOC, 'BLOCK.USERS.MESSAGE'
+IF ON.OFF = 'ON' THEN PRINT 'BLOCK SET' ELSE PRINT 'BLOCK CLEARED'
+SLEEP 1

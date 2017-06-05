@@ -56,7 +56,7 @@ SETTINGS<8>   = TRUE       ;* DEFAULT USE GET.LINE SUBR
 SETTINGS<9>   = 'BP.DEV'   ;* DEFAULT WORK FILE
 SETTINGS<10>  = FALSE      ;* DEFAULT = CONVERT TO UCASE
 SETTINGS<11>  = ""         ;* DEFAULT STARTUP COMMAND
-SETTINGS<12>  = "#R#H:A>"  ;* DEFAULT PROMPT
+SETTINGS<12>  = "#R#A>"    ;* DEFAULT PROMPT
 SETTINGS<13>  = -2         ;* DEFAULT X DISPLACEMENT FOR PROMPT
 SETTINGS<14>  = "bash"     ;* DEFAULT SHELL FOR UNIX COMMANDS
 SETTINGS<15>  = ""         ;* DEFAULT PROGRAM STACK TO USE
@@ -271,6 +271,11 @@ DO.COMMAND:
       GOSUB UPDATE.STACK
     CASE ANS='SETTINGS'
       GOSUB SETTINGS
+    CASE FIRST.WORD='RS'
+      GOSUB UPDATE.STACK
+      GOSUB RECALL.SHELL
+    CASE FIRST.WORD='FIND.MENU'
+      GOSUB FIND.MENU
     CASE OTHERWISE
       IF NOT(EXECUTING) THEN
         GOSUB UPDATE.STACK
@@ -385,22 +390,22 @@ EXPAND.PROMPT:
     L = PROMPT.DISP[1,I-1];R = TRIM(PROMPT.DISP[I+2,LONG.LINE])
     BEGIN CASE
       CASE F = 'B'
-        PROMPT.DISP = L:CHAR(7):R             
+        PROMPT.DISP = L:CHAR(7):R
       CASE F = 'A'
-        PROMPT.DISP = L:ACC:R                 
+        PROMPT.DISP = L:ACC:R
       CASE F = 'T'
-        PROMPT.DISP = L:OCONV(TIME(),'MTS'):R 
+        PROMPT.DISP = L:OCONV(TIME(),'MTS'):R
       CASE F = 'D'
-        PROMPT.DISP = L:OCONV(DATE(),'D'):R   
+        PROMPT.DISP = L:OCONV(DATE(),'D'):R
       CASE F = 'E'
-        PROMPT.DISP = L:CHAR(ESC):R           
+        PROMPT.DISP = L:CHAR(ESC):R
       CASE F = 'R'
-        PROMPT.DISP = L:CHAR(13):CHAR(10):R   
+        PROMPT.DISP = L:CHAR(13):CHAR(10):R
       CASE F = '#'
-        PROMPT.DISP = L:'#':R                 
+        PROMPT.DISP = L:'#':R
         CTR = CTR + 1
       CASE F = 'U'
-        PROMPT.DISP = L:USERNAME:R            
+        PROMPT.DISP = L:USERNAME:R
       CASE F = 'H'
         PROMPT.DISP=L:FIELD(HOST.NAME,".",1):R
       CASE OTHERWISE
@@ -469,10 +474,12 @@ STACK.COMMAND:
       PRINT 'BPI         List table definitions                        - BPI LS.CTD.PYMTHIST'
       PRINT '{C}CI/CM/TM {Customer}Contract Inquiry/Maintenance/Table Maintenance'
       PRINT 'DDD         Search dictionary definitions                 - DDD LS.MASTER EQUIP'
+      PRINT 'FIND.MENU   Search the menus                                   - FIND.MENU VOID'
       PRINT 'ICONV/OCONV Test format masks/Convert Data'
       PRINT 'PICKLE      Store data records in prog     - PICKLE DICT LS.MASTER UATB.BIG.ATB'
       PRINT 'PIVOT       Summary data                - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
       PRINT 'PROF        Profile data     - PROF LS.MASTER BRANCH NUM.OF.ASSETS BOOKING.DATE'
+      PRINT 'RS          Edit a recall                                       RS DK.AUDIT.RPT'
       PRINT 'RULER       Reset term width, show ruler'
       PRINT 'SETTINGS    Change settings'
       PRINT 'SF          Search files and dictionaries            - SF DICT LS.MASTER ASSETS'
@@ -940,7 +947,7 @@ RETURN
 DDD:
   * Tweak DICT VOC with some pickle juice
   R    =\DICT VOC#AM#@ID#AM#D#AM#0#AM##AM#VOC#AM#30L#AM#S#AM#\
-  R<-1>=\DICT VOC#AM#F1#AM#D#AM#1#AM##AM##AM#5L#AM#S#AM#\  
+  R<-1>=\DICT VOC#AM#F1#AM#D#AM#1#AM##AM##AM#5L#AM#S#AM#\
   R<-1>=\DICT VOC#AM#F2#AM#D#AM#2#AM##AM##AM#50L#AM#S#AM#\
   OPEN 'DICT VOC' TO FVAR ELSE RETURN
   FOR F=1 TO DCOUNT(R,@AM)
@@ -1063,6 +1070,51 @@ BPI:
   GOSUB EXEC.SUB
   CLOSE IL
   CLOSE IL.BPI
+RETURN
+*
+RECALL.SHELL:
+  DATA 1
+  DATA 1
+  RECALL=FIELD(ANS,' ',2)
+  IF RECALL # '' THEN DATA RECALL
+  EXECUTE \RECALL.00\
+RETURN
+*
+FIND.MENU:
+  OPEN "DB.MENUS" TO MENU.F ELSE STOP 201,"DB.MENUS"
+  STR=FIELD(ANS,' ',2)
+  IF STR='' THEN
+    PRINT "Enter menu or program to search for : ": ; INPUT STR
+    IF STR="" OR STR="/" THEN RETURN
+  END
+  PATH = '' ; MENU = 1 ; STR = OCONV(STR,"MCU")
+  *CALL SPLC.FIND.MENU(MENU,STR,MENU.F,PATH)
+  STACK=MENU
+  DEBUG
+  GOSUB FIND.MENU.SUB
+RETURN
+*
+FIND.MENU.SUB:
+  MENU=STACK<1>
+  DEL STACK<1>
+  READ R FROM MENU.F, MENU THEN
+    TITLES = OCONVS(R<2>,"MCU") ; PROGS  = OCONVS(R<3>,"MCU") ; FLAGS  = R<4>
+    I = DCOUNT(PROGS,@VM)
+    FOR F = 1 TO I
+      IF FLAGS<1,F> # 'M' THEN
+        IF INDEX(PROGS<1,F>,STR,1) # 0 OR INDEX(TITLES<1,F>,STR,1) # 0 THEN
+          PRINT MENU"L#4":" ":TITLES<1,F>"L#27":"  ":PROGS<1,F>"L#30":"  ":
+          K = DCOUNT(PATH,@VM) ; FOR J = 2 TO K ; PRINT PATH<1,J>:',': ; NEXT J ; PRINT F
+        END
+      END ELSE
+        MENU = PROGS<1,F>
+        INS MENU BEFORE STACK<1>
+        PATH = PATH:@VM:F
+        GOSUB FIND.MENU.SUB
+        K = DCOUNT(PATH,@VM) ; PATH=DELETE(PATH,1,K)
+      END
+    NEXT F
+  END
 RETURN
 *
 BFORMAT:
