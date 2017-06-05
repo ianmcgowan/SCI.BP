@@ -1,9 +1,9 @@
 ***************************************************************************
-* Program: SCI.XLS.RECALL
+* Program: SCI.XLSX.RECALL
 * Author : MCGOWJ01
 * Date   : 2017-02-10
 * Edited : 
-* Comment: Convert a recall into an excel sheet
+* Comment: Convert a recall into a "real" excel sheet
 ***************************************************************************
 * LOG DATE   BY           CHANGE
 * ---------- ------------ -------------------------------------------------
@@ -13,6 +13,7 @@
 DEBUG=0
 S=@SENTENCE
 FILE.NAME=FIELD(S,' ',2)
+RECIP=FIELD(S,' ',3)
 IF INDEX(FILE.NAME,'/',1) = 0 THEN STOP FILE.NAME:' is not a directory'
 OPENSEQ FILE.NAME TO INPUT.F ELSE STOP 201,FILE.NAME
 OUTPUT.DIR=FILE.NAME:'.TMP'
@@ -60,6 +61,7 @@ STOP
 *
 XLS.BODY:
   L='<x:row>' ; GOSUB WRITE.LINE
+  CONVERT @VM TO "|" IN ROW ;* Flatten any multivalued fields
   CONVERT '^' TO @VM IN ROW
   FOR C=1 TO DCOUNT(ROW<1>,@VM)
     CELL=ROW<1,C>
@@ -78,8 +80,9 @@ XLS.BODY:
           L='<x:c t="str"><x:v>':CELL:'</x:v></x:c>'
         END
       CASE 1 ;* String is default type
+        IF CELL[1,1]='+' THEN CELL=CELL[2,LEN(CELL)] ;* Excel thinks this is a formula
         IF NUM(CELL.NUM) AND CELL.NUM#'' THEN
-          * It's a number, but leave is unstyled so zip 90210 doesn't become 90210.00
+          * It's a number, but leave it unstyled so zip 90210 doesn't become 90210.00
           L='<x:c><x:v>':CELL:'</x:v></x:c>'
         END ELSE
           L='<x:c t="str"><x:v>':CELL:'</x:v></x:c>'
