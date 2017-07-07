@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.9
+* Version: 1.9.92
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.9'
+PRINT 'Version 1.9.92'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -204,20 +204,30 @@ DO.COMMAND:
       STOP
     CASE FIRST.WORD = 'ALIAS'
       GOSUB DO.ALIAS
-    CASE ANS = 'CI'
+    CASE ANS[1,2] = 'CI'
       * CONTRACT INQUIRY
+      CONTRACT=FIELD(ANS,' ',2)
       DATA 0
       DATA 0
       DATA 0
       DATA 0
+      IF CONTRACT # '' THEN
+        DATA FIELD(CONTRACT,'-',1)
+        DATA FIELD(CONTRACT,'-',2,2)
+      END
       EXEC.LINE=\CMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
-    CASE ANS = 'CM'
+    CASE ANS[1,2] = 'CM'
       * CONTRACT MAINTENANCE
+      CONTRACT=FIELD(ANS,' ',2)
       DATA 1
       DATA 0
       DATA 0
       DATA 0
+      IF CONTRACT # '' THEN
+        DATA FIELD(CONTRACT,'-',1)
+        DATA FIELD(CONTRACT,'-',2,2)
+      END
       EXEC.LINE=\CMAINT.00\ ; GOSUB EXEC.SUB
       GOSUB UPDATE.STACK
     CASE ANS = 'CCI'
