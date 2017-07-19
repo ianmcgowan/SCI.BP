@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.94
+* Version: 1.9.95
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.94'
+PRINT 'Version 1.9.95'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -477,6 +477,7 @@ STACK.COMMAND:
       PRINT 'DDD         Search dictionary definitions                 - DDD LS.MASTER EQUIP'
       PRINT 'FIND.MENU   Search the menus                                   - FIND.MENU VOID'
       PRINT 'ICONV/OCONV Test format masks/Convert Data'
+      PRINT 'LISTA       Show users logged in, as well as locks'
       PRINT 'PICKLE      Store data records in prog     - PICKLE DICT LS.MASTER UATB.BIG.ATB'
       PRINT 'PIVOT       Summary data                - PIVOT LS.MASTER LESSOR GROSS.CONTRACT'
       PRINT 'PROF        Profile data     - PROF LS.MASTER BRANCH NUM.OF.ASSETS BOOKING.DATE'
@@ -1933,7 +1934,7 @@ LISTA:
     END
   NEXT G
   *
-  PRINT @(-1):'LISTA'
+  PRINT @(-1):'USERS'
   PRINT
   PRINT 'Port':' ':'User''L#12':' ':'Date''L#10':' ':'Time''L#8':' ':
   PRINT 'Time On''L#8':' ':'Menu''L#30':' ':'L'
@@ -1951,20 +1952,18 @@ LISTA:
     IF USER.LIST<6,F>#'' THEN PRINT '*' ELSE PRINT ' '
   NEXT F
   *
-  PRINT ; PRINT 'Show locks? (Y/N):':
-  INPUT YORN
-  IF YORN = 'Y' THEN
-    PRINT
-    PRINT 'Table''L#20':' ':'ID''L#20':' ':'P''L#3':' ':
-    PRINT 'Date''L#10':' ':'Time''L#8':' ':'User''L#15'
-    PRINT STR('-',20):' ':STR('-',20):' ':STR('-',3):' ':
-    PRINT STR('-',10):' ':STR('-',8):' ':STR('-',15)
-    FOR L=1 TO DCOUNT(LOCK.LIST<1>,@VM)
-      FILE=FIELD(LOCK.LIST<1,L>,',',2)
-      PRINT FILE'L#20':' ':LOCK.LIST<2,L>'L#20':' ':LOCK.LIST<3,L>'R#3':' ':
-      PRINT LOCK.LIST<4,L>'D4/':' ':LOCK.LIST<5,L>'MTS':' ':LOCK.LIST<6,L>'L#15'
-    NEXT L
-  END
+  PRINT
+  PRINT 'LOCKS'
+  PRINT
+  PRINT 'Table''L#20':' ':'ID''L#25':' ':'Port''L#4':' ':
+  PRINT 'Date''L#5':' ':'Time''L#5':' ':'User''L#15'
+  PRINT STR('-',20):' ':STR('-',25):' ':STR('-',4):' ':
+  PRINT STR('-',5):' ':STR('-',5):' ':STR('-',15)
+  FOR L=1 TO DCOUNT(LOCK.LIST<1>,@VM)
+    FILE=FIELD(LOCK.LIST<1,L>,',',2)
+    PRINT FILE'L#20':' ':LOCK.LIST<2,L>'L#25':' ':LOCK.LIST<3,L>'R#4':' ':
+    PRINT (LOCK.LIST<4,L>'D4/')[1,5]:' ':LOCK.LIST<5,L>'MT':' ':LOCK.LIST<6,L>'L#15'
+  NEXT L
   *
   CLOSE ACC.F
   CLOSE INFO.STATUS
