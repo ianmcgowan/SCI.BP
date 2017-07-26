@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.95
+* Version: 1.9.96
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.95'
+PRINT 'Version 1.9.96'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -208,6 +208,10 @@ DO.COMMAND:
       STOP
     CASE FIRST.WORD = 'ALIAS'
       GOSUB DO.ALIAS
+    CASE FIRST.WORD = 'SE'
+      FILE=FIELD(ANS,' ',2)
+      ID=FIELD(ANS,' ',3)
+      GOSUB SEARCH.BY.EXAMPLE
     CASE ANS[1,2] = 'CI'
       * CONTRACT INQUIRY
       CONTRACT=FIELD(ANS,' ',2)
@@ -1968,5 +1972,30 @@ LISTA:
   CLOSE ACC.F
   CLOSE INFO.STATUS
   *
+RETURN
+*
+SEARCH.BY.EXAMPLE:
+  * Calculate all possible ATB's for an example contract
+  @ID=ID
+  IF FILE='' OR @ID='' THEN
+    PRINT 'Usage: SE <FNAME> <ID>'
+    RETURN
+  END
+  OPEN FILE TO F ELSE PRINT 'Cannot open ':FILE ; RETURN
+  OPEN "DICT ":FILE TO @DICT ELSE PRINT 'Cannot open DICT ':FILE ; RETURN
+  READ @RECORD FROM F, @ID ELSE PRINT 'Cannot read ':@ID:' in ':FILE ; RETURN
+  CLOSE F
+  OUTPUT=''
+  EXECUTE \SSELECT DICT \:FILE:\ WITH F1 = "I" USING DICT VOC\
+  LOOP
+  READNEXT FLD ELSE EXIT
+    PRINT FLD:'=':
+    VAL=CALCULATE(FLD)
+    PRINT VAL
+    IF @CONV # '' THEN VAL=OCONV(VAL,@CONV)
+    *OUTPUT<-1>=FLD:'=':VAL
+  REPEAT
+  WRITE OUTPUT ON VOC, 'OUTPUT.TMP'
+  EXECUTE \AE VOC OUTPUT.TMP\
 RETURN
 *
