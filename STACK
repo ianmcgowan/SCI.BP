@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.96
+* Version: 1.9.97
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.96'
+PRINT 'Version 1.9.97'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -161,7 +161,7 @@ COMMAND:
   UNIX.COMMAND=FALSE
   IF ANS[1,1] = UNIX THEN UNIX.COMMAND=TRUE
   OLD.STACK = STACK
-  START.WORD.SEARCH = 1
+ START.WORD.SEARCH = 1
   COMMAND.LIST = ANS
   COMMAND.COUNT = 1
   IF STARTUP#NUL THEN EXECUTING=TRUE ELSE EXECUTING=FALSE
@@ -252,6 +252,8 @@ DO.COMMAND:
       DATA 1
       DATA 0
       EXEC.LINE=\TMAINT.00\ ; GOSUB EXEC.SUB
+    CASE FIRST.WORD = 'CHECK.FILE'
+      GOSUB CHECK.FILE
     CASE ANS = 'ICONV'
       CONV='I'
       GOSUB CONV
@@ -285,7 +287,7 @@ DO.COMMAND:
       GOSUB LISTA
     CASE OTHERWISE
       EXEC.LINE = ANS
-      GOSUB EXEC.SUB
+     GOSUB EXEC.SUB
   END CASE
   IF UPDATE.STACK.FLAG THEN GOSUB UPDATE.STACK
 RETURN
@@ -300,7 +302,7 @@ DO.ALIAS:
     I = I + 1
   REPEAT
   BEGIN CASE
-    CASE AL = NUL AND STRING = NUL
+   CASE AL = NUL AND STRING = NUL
       GOSUB LIST.ALIAS
     CASE STRING = NUL
       GOSUB LIST.ONE.ALIAS
@@ -372,7 +374,7 @@ EXPAND.ALIASES:
   LOOP
     R = ANS<1,POS>
   UNTIL R = NUL DO
-    LOCATE R IN ALIASES<1> BY 'AL' SETTING P THEN ANS<1,POS> = ALIASES<2,P>
+   LOCATE R IN ALIASES<1> BY 'AL' SETTING P THEN ANS<1,POS> = ALIASES<2,P>
     POS = POS + 1
   REPEAT
   SWAP @VM WITH SPC IN ANS
@@ -477,6 +479,7 @@ STACK.COMMAND:
       PRINT '---------------------------- UTILITIES ----------------------------------------'
       PRINT 'AF          ATB Finder, search definitions                          - AF MRKTNG'
       PRINT 'BPI         List table definitions                        - BPI LS.CTD.PYMTHIST'
+      PRINT 'CHECK.FILE  Show strings in a compiled program /P|/S    - CHECK.FILE DISP.00 /P'
       PRINT '{C}CI/CM/TM {Customer}Contract Inquiry/Maintenance/Table Maintenance'
       PRINT 'DDD         Search dictionary definitions                 - DDD LS.MASTER EQUIP'
       PRINT 'FIND.MENU   Search the menus                                   - FIND.MENU VOID'
@@ -515,7 +518,7 @@ GET.PARAMS:
   END
   IF P1 = NUL THEN P1 = 1
   IF P2 = NUL THEN P2 = MAX.STACK
-  IF NUM(P1) & NUM(P2) & P1 > 0 & P2 <= MAX.STACK THEN
+  IF NUM(P1) & NUM(P2) & P1 > 0 THEN
     RANGE.ERROR = FALSE
   END ELSE
     RANGE.ERROR = TRUE
@@ -888,6 +891,69 @@ WP.EDIT:
     READ R FROM XML, WP.ITEM ELSE R=''
     WRITE R ON T, WP.ITEM
     CLOSE T
+  END
+RETURN
+*
+CHECK.FILE:
+  PARAM.CTR=1 ; PROG.FLAG=0 ; FILE.FLAG=0 ; ALL.FLAG=0
+  LOOP
+    P=FIELD(ANS,' ',PARAM.CTR)
+  UNTIL P='' DO
+    IF P[1,1] = '/' THEN
+      P=P[2,1]
+      BEGIN CASE
+        CASE P='P'
+          PROG.FLAG=1
+        CASE P='F'
+          FILE.FLAG=1
+        CASE P='A'
+          ALL.FLAG=1
+      END CASE
+    END ELSE
+      PROG=P
+    END
+    PARAM.CTR += 1
+  REPEAT
+  IF PROG.FLAG=0 AND FILE.FLAG=0 THEN ALL.FLAG=1
+  *
+  IF PROG # '' THEN
+    READ CAT.PTR FROM VOC, PROG ELSE PRINT 'Cannot read VOC ':PROG ; RETURN
+  END ELSE
+    LOOP
+      PRINT 'Enter the program to scan ':
+      INPUT PROG
+      IF PROG = '' OR PROG = '/' THEN RETURN
+      READ CAT.PTR FROM VOC, PROG THEN EXIT
+      PRINT 'Cannot read VOC ':PROG
+    REPEAT
+  END
+  *
+  EXECUTE "!strings ":CAT.PTR<2>:" > $HOME/FILE.LIST"
+  *
+  FILE.LIST=''
+  READ R FROM HOME.F, 'FILE.LIST' THEN
+    I=DCOUNT(R,@AM)
+    FOR F=1 TO I
+      TEST.FILE=R<F>
+      IF FILE.FLAG THEN
+        OPEN TEST.FILE TO DUMMY THEN
+          LOCATE TEST.FILE IN FILE.LIST BY 'AL' SETTING POS ELSE
+            INS TEST.FILE BEFORE FILE.LIST<POS>
+            PRINT 'FILE:':TEST.FILE
+          END
+          CLOSE DUMMY
+        END
+      END
+      IF PROG.FLAG THEN
+        READ DUMMY FROM VOC, TEST.FILE THEN
+          *IF DUMMY = 'C' THEN PRINT 'PROG: ':TEST.FILE
+          IF DUMMY<1>='C' THEN PRINT 'PROG: ':TEST.FILE'L#25':' ':DUMMY<2>
+        END
+      END
+      IF ALL.FLAG THEN
+        PRINT TEST.FILE
+      END
+    NEXT F
   END
 RETURN
 *
@@ -1388,7 +1454,7 @@ FORWARD.WORD:
   * Tab key pressed - move forwards a word
   IF CH.PTR >= CURR.LEN THEN
     PRINT BEEP:
-  END ELSE
+ END ELSE
     LOOP
       CH.PTR = CH.PTR + 1
       CP = CP + 1
@@ -1560,7 +1626,7 @@ RETURN
 *
 GO.END:
   * Move to the end of data and redisplay
-  IF XXDATA[CURR.LEN,1] # SPC THEN
+ IF XXDATA[CURR.LEN,1] # SPC THEN
     XXDATA = XXDATA:SPC
     CURR.LEN = CURR.LEN + 1
   END
@@ -1798,7 +1864,7 @@ SETTINGS:
   *
   PRINT
   PRINT 'Use enhanced input commands, allowing editing with arrow keys'
-  PRINT 'Or just use plain INPUT command'
+ PRINT 'Or just use plain INPUT command'
   PRINT 'Current value:':SETTINGS<8>
   PRINT 'USE GET.LINE SUBR:':
   INPUT ENTRY
@@ -1988,7 +2054,7 @@ SEARCH.BY.EXAMPLE:
   OUTPUT=''
   EXECUTE \SSELECT DICT \:FILE:\ WITH F1 = "I" USING DICT VOC\
   LOOP
-  READNEXT FLD ELSE EXIT
+    READNEXT FLD ELSE EXIT
     PRINT FLD:'=':
     VAL=CALCULATE(FLD)
     PRINT VAL
