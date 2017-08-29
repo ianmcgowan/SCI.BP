@@ -220,6 +220,7 @@ DO.COMMAND:
       DATA 0
       DATA 0
       IF CONTRACT # '' THEN
+        CONVERT '.' TO '-' IN CONTRACT
         DATA FIELD(CONTRACT,'-',1)
         DATA FIELD(CONTRACT,'-',2,2)
       END
