@@ -212,7 +212,7 @@ DO.COMMAND:
       FILE=FIELD(ANS,' ',2)
       ID=FIELD(ANS,' ',3)
       GOSUB SEARCH.BY.EXAMPLE
-    CASE ANS[1,2] = 'CI'
+    CASE FIRST.WORD = 'CI'
       * CONTRACT INQUIRY
       CONTRACT=FIELD(ANS,' ',2)
       DATA 0
@@ -225,7 +225,7 @@ DO.COMMAND:
         DATA FIELD(CONTRACT,'-',2,2)
       END
       EXEC.LINE=\CMAINT.00\ ; GOSUB EXEC.SUB
-    CASE ANS[1,2] = 'CM'
+    CASE FIRST.WORD = 'CM'
       * CONTRACT MAINTENANCE
       CONTRACT=FIELD(ANS,' ',2)
       DATA 1
@@ -238,17 +238,23 @@ DO.COMMAND:
         DATA FIELD(CONTRACT,'-',2,2)
       END
       EXEC.LINE=\CMAINT.00\ ; GOSUB EXEC.SUB
-    CASE ANS = 'CCI'
+    CASE FIRST.WORD = 'CCI'
       * CUSTOMER INQUIRY
       DATA 0
       DATA 0
       DATA 0
+      IF FIELD(ANS,' ',2) # '' THEN
+        DATA FIELD(ANS,' ',2)
+      END
       EXEC.LINE=\CDMAINT.00\ ; GOSUB EXEC.SUB
-    CASE ANS = 'CCM'
+    CASE FIRST.WORD = 'CCM'
       * CUSTOMER MAINTENANCE
       DATA 1
       DATA 0
       DATA 0
+      IF FIELD(ANS,' ',2) # '' THEN
+        DATA FIELD(ANS,' ',2)
+      END
       EXEC.LINE=\CDMAINT.00\ ; GOSUB EXEC.SUB
     CASE ANS = 'TM'
       DATA 1
