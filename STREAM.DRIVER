@@ -1,0 +1,20 @@
+********************************************************************************
+* Program: STREAM.DRIVER
+* Author : Ian McGowan
+* Date   : 2017-09-29
+* Version: 1.0
+* Comment: Decide which streams need to be run
+********************************************************************************
+D=DATE()
+DAY=OCONV(D,"DD")
+DOW.NO=OCONV(D,"DW")
+DAYS='MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY,SATURDAY,SUNDAY'
+CONVERT ',' TO @AM IN DAYS
+DOW=DAYS<DOW.NO>
+PRINT 'STREAM.DRIVER:':OCONV(D,'D-YMD'):' ':DOW:' ':DAY
+*
+EXECUTE \PHANTOM DAILY\
+*
+EXECUTE \PHANTOM \:DAY
+*
+EXECUTE \PHANTOM \:DOW
