@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.97
+* Version: 1.9.98
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.97'
+PRINT 'Version 1.9.98'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -13,7 +13,7 @@ EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
 EQUATE SEARCH TO '~', UNIX TO '!'
 EQUATE BELL TO CHAR(7), OTHERWISE TO 1
 TERM=UPCASE(GETENV("TERM"))
-CS=@(-1);EOL=@(-4);EOS=@(-3);UP=@(-10)
+CS=@(-1);EOL=@(-4);EOS=@(-3);UP=@(-10);BON=@(-81);BOFF=@(-82)
 PROMPT NUL
 *
 GOSUB GET.TERM.WIDTH
@@ -109,7 +109,7 @@ ANS=NUL
 *
 LOOP
   GOSUB EXPAND.PROMPT
-  PRINT PROMPT.DISP:
+  PRINT BON:PROMPT.DISP:BOFF:
   X = LEN(PROMPT.DISP) + X.DISP
   ENTRY = NUL;LEN = LONG.LINE;DISP.LEN=TERM.WIDTH-1-X
   GOSUB GET.INPUT
