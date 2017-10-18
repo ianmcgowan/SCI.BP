@@ -2,10 +2,10 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.98
+* Version: 1.9.99
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
-PRINT 'Version 1.9.98'
+PRINT 'Version 1.9.99'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -94,6 +94,7 @@ EXEC.LINE="!hostname" ; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
 HOST.NAME=EXEC.CAP<1>
 *
 READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
+PRINT DCOUNT(STACK,@AM):' commands in stack'
 READ ALIASES FROM HOME.F, ALIAS.ITEM ELSE ALIASES = NUL
 * Override with my favorites for now.  It's a pain to manage per system.
 ALIASES<1>='ACTIVE'
