@@ -2,7 +2,7 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.991
+* Version: 1.9.992
 * Comment: Stacks TCL commands, bash for PICK
 ***************************************************************************
 PRINT 'Version 1.9.99'
@@ -36,6 +36,7 @@ IF HOME.DIR#'' THEN
 END ELSE
   HOME.DIR=GETENV("HOME")
 END
+CRT 'Home=':HOME.DIR
 STACK.ITEM='.STACK_':USERNAME
 ALIAS.ITEM='.STACK.ALIAS_':USERNAME
 PROGRAM.ITEM='.STACK.PROGRAM_':USERNAME
