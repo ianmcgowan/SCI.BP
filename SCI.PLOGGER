@@ -1,0 +1,60 @@
+***************************************************************************
+* Program: SCI.PLOGGER
+* Author : Ian McGowan
+* Date   : 2018-11-19
+* Version: 1.0
+* Comment: Insert logging code into a program
+***************************************************************************
+PROMPT ''
+OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
+LOOP
+  CRT 'Enter program BP  :':
+  INPUT BP.NAME
+  IF BP.NAME='/' OR BP.NAME='' THEN STOP
+  READV R FROM VOC, BP.NAME, 1 ELSE CRT 'VOC entry not found' ; CONTINUE
+  IF R # 'DIR' THEN CRT 'Not a DIR type file' ; CONTINUE
+  OPEN BP.NAME TO BP ELSE CRT 'Cannot open' ; CONTINUE
+  EXIT
+REPEAT
+*
+LOOP
+  CRT 'Enter program name:':
+  INPUT PROG.NAME
+  IF PROG.NAME='/' OR PROG.NAME='' THEN STOP
+  READ PROG FROM BP, PROG.NAME ELSE CRT 'Cannot read ':PROG.NAME ; CONTINUE
+  EXIT
+REPEAT
+*
+* Loop over the program, wrapping GOSUB and CALL with profile code
+*
+FOR L=1 TO DCOUNT(PROG,@AM)
+  LINE=PROG<L>
+  FIRST.WORD=FIELD(TRIM(LINE),' ',1)
+  SECOND.WORD=FIELD(TRIM(LINE),' ',2)
+  SUB=''
+  IF FIRST.WORD='GOSUB' THEN
+    SUB=SECOND.WORD
+  END
+  IF FIRST.WORD='CALL' THEN
+    SUB=FIELD(SECOND.WORD,'(',1)
+  END
+  IF SUB # '' THEN
+    LINE=\PLOG="LINE#\:L:\-BEFORE:\:FIRST.WORD:\ \:SUB:\";GOSUB PLOGGER;\:LINE:\;PLOG="LINE#\:L:\-AFTER:\:FIRST.WORD:\ \:SUB:\";GOSUB PLOGGER\
+  END
+  PROG<L>=LINE
+NEXT L
+*
+PROG<-1>=\*\
+PROG<-1>=\PLOGGER:\
+PROG<-1>=\  IF UNASSIGNED(PLOG.FILE) THEN PLOG.I=0;PLOG.FILE='_HOLD_/':DATE():'*':TIME();OSWRITE '' ON PLOG.FILE;OPENSEQ PLOG.FILE TO PLOG.F ELSE RETURN\
+PROG<-1>=\  IF INDEX(PLOG,'GOSUB',1) AND INDEX(PLOG,'-AFTER',1) THEN PLOG.I-=2\
+PROG<-1>=\  WRITESEQF TIMEDATE():'|':SYSTEM(12):'|':SPACE(PLOG.I):PLOG APPEND ON PLOG.F ON ERROR RETURN ELSE RETURN\
+PROG<-1>=\  IF INDEX(PLOG,'GOSUB',1) AND INDEX(PLOG,'-BEFORE',1) THEN PLOG.I+=2 \
+PROG<-1>=\RETURN\
+PROG<-1>=\\
+*
+FOR L=1 TO DCOUNT(PROG,@AM)
+  CRT L'L#5':' ':PROG<L>
+NEXT L
+*
+WRITE PROG ON BP, PROG.NAME
