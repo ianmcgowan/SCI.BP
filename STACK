@@ -5,7 +5,8 @@
 * Version: 1.9.20181203
 * Comment: Stacks TCL commands
 ***************************************************************************
-PRINT 'Version 1.9.20181108'
+* https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
+PRINT 'Version 1.9.20181203'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -115,7 +116,7 @@ END ELSE
   EXECUTE \!grep \:JDBC:\ ../../jdbc-bridge/bin/jdbc.properties | grep -v "^#" | grep url\ CAPTURING IL.DB
   IL.DB=IL.DB<1>
   IL.VER='10'
-END  
+END
 CRT IL.VER:' ':IL.DB
 IF STARTUP # NUL THEN ANS=STARTUP ; GOSUB COMMAND ; STARTUP=NUL
 ANS=NUL
@@ -537,7 +538,7 @@ STACK.COMMAND:
       PRINT 'RULER       Reset term width, show ruler'
       PRINT 'SETTINGS    Change settings'
       PRINT 'SF          Search files and dictionaries            - SF DICT LS.MASTER ASSETS'
-    CASE ANS = '.T'	
+    CASE ANS = '.T'
       TIME.COMMAND=NOT(TIME.COMMAND)
     CASE ANS = '.U'
       IF MCU.ON THEN MCU.ON = FALSE;PRINT 'upper case off' ELSE MCU.ON = TRUE;PRINT 'UPPER CASE ON'
