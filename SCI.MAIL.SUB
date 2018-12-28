@@ -1,0 +1,125 @@
+SUBROUTINE SCI.MAIL.SUB(RECIP, FROM.USER, CC.USER, MSG, ATTACH, SUBJECT, OPTIONS)
+***************************************************************************
+* Program: SCI.MAIL.SUB
+* Author : Ian McGowan
+* Date   : 2017-01-05
+* Edited : 
+* Comment: General routine to email (with attachments)
+***************************************************************************
+* LOG DATE   BY           CHANGE
+* ---------- ------------ -------------------------------------------------
+* 2017-01-18 Ian          If RECIP=@LOGNAME, use ~/.email as address
+* 2017-02-06 Ian          Switch to sendmail to get from address
+* 2018-12-28 Ian          Add mime-encoding, zip of large files
+*
+TMP.F='/tmp/sci.mail.sub.':SYSTEM(12)
+IF RECIP = '' OR RECIP='@LOGNAME' THEN
+  GOSUB GET.MY.EMAIL
+  IF MY.EMAIL='' THEN RETURN
+  RECIP=MY.EMAIL
+END
+*
+IF FROM.USER = '' OR FROM.USER = '@LOGNAME' THEN
+  GOSUB GET.MY.EMAIL
+  IF MY.EMAIL='' THEN RETURN
+  FROM.USER=MY.EMAIL
+END  
+*
+IF ATTACH = "" THEN
+  * No attachment, just a message, all this foolishness because mail and sendmail both suck...
+  INS '' BEFORE MSG<1>
+  INS 'Subject: ':SUBJECT BEFORE MSG<1>
+  IF CC.USER # '' THEN INS 'Cc: ':CC.USER BEFORE MSG<1>
+  INS 'To: ':RECIP BEFORE MSG<1>
+  MSG<-1>=@AM:@AM
+  CONVERT @AM TO CHAR(10) IN MSG
+  OSWRITE MSG ON TMP.F
+  E=\!sendmail -t -f \:FROM.USER:\ <\:TMP.F
+  PRINT E
+  EXECUTE E
+END ELSE
+  E=\!dirname "\:ATTACH:\"\
+  EXECUTE E CAPTURING DIR
+  E=\!basename "\:ATTACH:\"\
+  EXECUTE E CAPTURING FILE
+  DIR=DIR<1> ; FILE=FILE<1>
+  * Decide if zip is needed
+  E=\!perl -E 'print -s $ARGV[0]' \:ATTACH
+  CRT E
+  EXECUTE E CAPTURING SIZE
+  CRT 'SIZE=':SIZE
+  IF SIZE+0 > 5000000 THEN
+    E=\!zip -j \:TMP.F:\.zip \:ATTACH
+    CRT E
+    EXECUTE E
+    ATTACH=TMP.F:'.zip'
+    FILE:='.zip'
+  END
+  GOSUB MIME
+END
+E=\!rm -f \:TMP.F:\ \:TMP.F:\.zip\
+CRT E
+EXECUTE E
+RETURN
+*
+UUENCODE:
+  * Attachment, use uuencode to add attachment
+  E=\!cd "\:DIR:\" ; (echo "\:MSG:\" ; uuencode "\:FILE:\" "\:FILE:\") |\
+  E:=\mail -s "\:SUBJECT:\" \:RECIP
+  PRINT E
+  EXECUTE E
+RETURN
+*
+MIME:
+  * Attachment, use MIME to add attachment
+  BOUNDARY="_====SCI.MAIL.SUB====":SYSTEM(12):"====_"
+  M=''
+  M<-1>="To: ":RECIP
+  IF CC.USER # '' THEN M<-1>="Cc: ":CC.USER
+  M<-1>="Subject: ":SUBJECT
+  M<-1>="Content-Type: multipart/mixed; boundary=":BOUNDARY
+  M<-1>="Mime-Version: 1.0"
+  M<-1>=""
+  M<-1>="This is a multi-part message in MIME format."
+  M<-1>=""
+  M<-1>="--":BOUNDARY
+  M<-1>="Content-Type: text/plain; charset=ISO-8859-1"
+  M<-1>=""
+  M<-1>=MSG
+  M<-1>="--":BOUNDARY
+  M<-1>="Content-Transfer-Encoding: base64"
+  M<-1>="Content-Type: application/octet-stream; name=":FILE
+  M<-1>="Content-Disposition: attachment; filename=":FILE
+  M<-1>=CHAR(10)
+  CONVERT @AM TO CHAR(10) IN M
+  OSWRITE M ON TMP.F
+  *E=\!perl -MMIME::Base64 -0777 -ne 'print encode_base64($_)' < \:ATTACH:\ >> \:TMP.F ;* Portable, but chokes on really big files
+  E=\!openssl base64 < \:ATTACH:\ >> \:TMP.F ;* Fast, but needs openssl client installed
+  CRT E
+  EXECUTE E
+  E=\!echo "" >> \:TMP.F
+  CRT E
+  EXECUTE E
+  E=\!echo '--\:BOUNDARY:\--' >> \:TMP.F
+  CRT E
+  EXECUTE E
+  E=\!sendmail -oi -t < \:TMP.F
+  CRT E
+  EXECUTE E
+RETURN
+*
+GET.MY.EMAIL:
+  EMAIL.FILE='/home/':@LOGNAME:'/.email'
+  OSREAD MY.EMAIL FROM EMAIL.FILE ELSE
+    LOOP
+      PRINT @(-1):'Please enter your email address: ':
+      INPUT MY.EMAIL
+      IF MY.EMAIL='/' THEN RETURN
+      IF INDEX(MY.EMAIL,'@',1)=0 THEN PRINT 'Invalid address!';MY.EMAIL='';SLEEP 2
+    UNTIL MY.EMAIL#'' DO
+    REPEAT
+    OSWRITE MY.EMAIL ON EMAIL.FILE
+  END
+  * In case there is an extra LF or multiple lines in the file
+  MY.EMAIL=FIELD(MY.EMAIL<1>,CHAR(10),1)
+RETURN
