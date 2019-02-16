@@ -2,7 +2,7 @@
 * Program: SCI.UCI.DEBUG
 * Author : MCGOWJ01
 * Date   : 2018-11-07
-* Version: 1.0
+* Version: 2018-02-16
 * Comment: Help troubleshoot UCI/XML issues
 ********************************************************************************
 PROMPT ''
@@ -28,45 +28,88 @@ FOR L=1 TO DCOUNT(LAYOUT,@AM)
 NEXT L
 *
 LOOP
-  CRT @(-1):'Enter LS.REMOTE.LISTING key, or X for raw XML:':
+  CRT @(-1):'Enter Contract, LS.REMOTE.LISTING key, or X for raw XML:':
   INPUT KEY
   IF KEY='' OR KEY='/' THEN STOP
   XML=''
-  IF KEY='X' THEN
-    CRT 'Paste XML now:':
-    INPUT XML
-  END ELSE
-    READ R FROM LS.REMOTE.LISTING, KEY THEN
-      LAST.LINE=DCOUNT(R,@AM)
-      XML=R<LAST.LINE>
-      S.TAG = \<UI_DATA>\
-      E.TAG = \</UI_DATA>\
-      PASS.XML = XML
-      TAG.LEN = LEN(E.TAG)
-      VALUE = ''; VALUE.STR = ''
-      CALL API.50.PARSE.STRING(S.TAG,E.TAG,TAG.LEN,1,VALUE,VALUE.STR,PASS.XML)
-      XML=VALUE
-    END ELSE
-      CRT 'Not found'
-    END
-  END
-  CONVERT '^' TO @AM IN XML
-  MAX=DCOUNT(XML,@AM)
-  X=1
-  LOOP
-    VALUE=XML<X>
-    CRT VALUE: ; INPUT AAA
-    LOCATE VALUE IN HEADER.REC<1> SETTING POS THEN
-      GROUP=VALUE
-      FIELD.LIST=FIELD.REC<POS>
-      X += 1
-    END
-    FOR F=1 TO DCOUNT(FIELD.LIST<1>,@VM)
+  BEGIN CASE
+    CASE KEY='X'
+      CRT 'Paste XML now:':
+      INPUT XML
+    CASE KEY[1,4]='xml_'
+      READ R FROM LS.REMOTE.LISTING, KEY THEN
+        GOSUB GET.XML
+      END ELSE
+        CRT KEY:' Not found'
+      END
+    CASE 1
+      CALL SCI.CHECK.CONTRACT(RTN, KEY, OPTIONS)
+      IF RTN = 'OK' THEN
+        XML.LIST=''
+        E=\SELECT LS.MASTER,LS.REMOTE.LISTING WITH CRR.CREATED.KEY = "\:KEY:\"\
+        CRT E
+        EXECUTE E
+        LOOP
+          READNEXT KEY ELSE EXIT
+          XML.LIST<-1>=KEY
+        REPEAT
+        MAX.CTR=DCOUNT(XML.LIST,@AM)
+        BEGIN CASE
+          CASE MAX.CTR=1
+            KEY=XML.LIST<1>
+          CASE MAX.CTR > 1
+            FOR F=1 TO DCOUNT(XML.LIST,@AM)
+              CRT F, XML.LIST<F>
+            NEXT F
+            CRT 'Enter the key to dump:':
+            INPUT N
+            IF N='' OR N='/' THEN STOP
+            KEY=XML.LIST<N>
+          CASE 1
+            CRT 'Contract not found'
+        END CASE
+        READ R FROM LS.REMOTE.LISTING, KEY THEN
+          GOSUB GET.XML
+        END ELSE
+          CRT KEY:' Not found'
+        END
+      END ELSE
+        CRT RTN
+      END
+  END CASE
+  IF XML#'' THEN
+    CONVERT '^' TO @AM IN XML
+    MAX=DCOUNT(XML,@AM)
+    X=1
+    LOOP
       VALUE=XML<X>
-      CRT X 'R#4':' ':FIELD.LIST<1,F>'L#25':'=':VALUE
-      X += 1
-    NEXT F
-    IF X>MAX THEN EXIT
-  REPEAT
+      CRT VALUE
+      LOCATE VALUE IN HEADER.REC<1> SETTING POS THEN
+        GROUP=VALUE
+        FIELD.LIST=FIELD.REC<POS>
+        X += 1
+      END
+      FOR F=1 TO DCOUNT(FIELD.LIST<1>,@VM)
+        VALUE=XML<X>
+        CRT X 'R#4':' ':FIELD.LIST<1,F>'L#25':'=':VALUE
+        X += 1
+      NEXT F
+      IF X>MAX THEN EXIT
+    REPEAT
+  END
   CRT 'Press ENTER:': ; INPUT AAA
 REPEAT
+STOP
+*
+GET.XML:
+  LAST.LINE=DCOUNT(R,@AM)
+  XML=R<LAST.LINE>
+  S.TAG = \<UI_DATA>\
+  E.TAG = \</UI_DATA>\
+  PASS.XML = XML
+  TAG.LEN = LEN(E.TAG)
+  VALUE = ''; VALUE.STR = ''
+  CALL API.50.PARSE.STRING(S.TAG,E.TAG,TAG.LEN,1,VALUE,VALUE.STR,PASS.XML)
+  XML=VALUE
+RETURN
+*
