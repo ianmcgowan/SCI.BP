@@ -2,11 +2,11 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 1.9.20181220
+* Version: 2019-03-21
 * Comment: Stacks TCL commands
 ***************************************************************************
 * https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
-PRINT 'Version 1.9.20181220'
+CRT 'Version 2019-03-31'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -310,6 +310,8 @@ DO.COMMAND:
       GOSUB FIND.MENU
     CASE ANS='LISTA'
       GOSUB LISTA
+    CASE FIRST.WORD = 'DESC'
+      GOSUB IL10.DESC
     CASE FIRST.WORD = 'XREF'
       GOSUB IL10.XREF
     CASE FIRST.WORD = 'FIELD'
@@ -524,6 +526,7 @@ STACK.COMMAND:
       PRINT 'FIELD       Show IL10 attribute/field metadata            - FIELD LS.NET.INVEST'
       PRINT 'NED         Edit an IL10 record                 - NED LS.MASTER 123-1234567-000'
       PRINT 'NSEL        Run a simple UD command - NSEL LS.INV.NUM N.CONTRACT.KEY N.DATE.DUE'
+      PRINT 'DESC        Describe columns in a table                - DESC LS_OI_CTD_INVOICE'
       PRINT 'SQL         Run a SQL command -SQL SELECT TOP 10 ALTERNATE_ID FROM LS_MASTER_NF'
       PRINT 'XREF        Show IL10 file/table metadata                      - XREF LS.MASTER'
       PRINT '                              ---INFOLEASE---'
@@ -2245,6 +2248,14 @@ IL10.AF:
   SELECT.COMMAND = \SELECT BPI,FILE_NAME,FIELD_NAME,STRING_POS,TABLE_NAME,COLUMN_NAME,VALUE_TYPE,FIELD_TYPE,FIELD_LENGTH,SCALE\
   SELECT.COMMAND  :=\ FROM METADATA_FIELDS\
   SELECT.COMMAND  :=\ WHERE FIELD_NAME LIKE '%\:FLD:\%' OR COLUMN_NAME LIKE '%\:FLD:\%'\
+  GOSUB IL10.SEL
+RETURN
+*
+IL10.DESC:
+  TABLE = FIELD(ANS,' ',2)
+  SELECT.HDR=\COL,COLUMN_NAME,DATA_TYPE\
+  SELECT.COMMAND = \SELECT ORDINAL_POSITION, COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS\
+  SELECT.COMMAND:= \ WHERE TABLE_NAME = '\:TABLE:\'\
   GOSUB IL10.SEL
 RETURN
 *
