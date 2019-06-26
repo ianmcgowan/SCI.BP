@@ -2,10 +2,11 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 2019-05-09
+* Version: 2019-06-25
 * Comment: Stacks TCL commands
 ***************************************************************************
-CRT 'Version 2019-05-09'
+* https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
+CRT 'Version 2019-06-25'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -35,11 +36,9 @@ SETTING.ITEM='.STACK.SETTING_':USERNAME
 HOME.FILE='HOME.':UPCASE(USERNAME)
 OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
 OPEN '_HOLD_' TO HOLD ELSE STOP 201,'_HOLD_' ;* Exists in every Unidata account
-OPEN HOME.FILE TO HOME.F ELSE
-  R='DIR' ; R<2>=HOME.DIR ; R<3>='D_VOC'
-  WRITE R ON VOC, HOME.FILE
-  OPEN HOME.FILE TO HOME.F ELSE STOP 201, HOME.FILE
-END
+R='DIR' ; R<2>=HOME.DIR ; R<3>='D_VOC'
+WRITE R ON VOC, HOME.FILE
+OPEN HOME.FILE TO HOME.F ELSE STOP 201, HOME.FILE
 OPEN 'CTLGTB' TO CTLGTB ELSE STOP 201,'CTLGTB'
 OPEN 'CTLG'   TO CTLG   ELSE STOP 201,'CTLG'
 *
@@ -92,7 +91,7 @@ EXEC.LINE="!hostname" ; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
 HOST.NAME=EXEC.CAP<1>
 *
 READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
-PRINT DCOUNT(STACK,@AM):' commands in stack'
+PRINT DCOUNT(STACK,@AM):' commands in stack ':HOME.FILE
 READ ALIASES FROM HOME.F, ALIAS.ITEM ELSE ALIASES = NUL
 * Override with my favorites for now.  It's a pain to manage per system.
 ALIASES<1>='ACTIVE'
