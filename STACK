@@ -2,11 +2,11 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 2019-06-25
+* Version: 2019-09-03
 * Comment: Stacks TCL commands
 ***************************************************************************
 * https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
-CRT 'Version 2019-06-25'
+CRT 'Version 2019-08-29'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -91,7 +91,7 @@ EXEC.LINE="!hostname" ; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
 HOST.NAME=EXEC.CAP<1>
 *
 READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
-PRINT DCOUNT(STACK,@AM):' commands in stack ':HOME.FILE
+PRINT DCOUNT(STACK,@AM):' commands in stack ':HOME.DIR:'/':HOME.FILE
 READ ALIASES FROM HOME.F, ALIAS.ITEM ELSE ALIASES = NUL
 * Override with my favorites for now.  It's a pain to manage per system.
 ALIASES<1>='ACTIVE'
@@ -384,6 +384,7 @@ RETURN
 *
 EXEC.SUB:
   IF EXEC.LINE = NUL THEN RETURN
+  IF EXEC.LINE = 'CLEARSELECT' THEN CLEARSELECT
   IF CAP.ACTIVE THEN
     EXECUTE EXEC.LINE CAPTURING EXEC.CAP
   END ELSE
