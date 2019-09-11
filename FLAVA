@@ -1,0 +1,42 @@
+********************************************************************************
+* Program: FLAVA
+* Author : MCGOWJ01
+* Created: 2019-09-11
+* Updated: 2019-09-11
+* Comment: Find DB flavo{u}r
+********************************************************************************
+*
+* Probe for jBase, thanks to Andrew Cole <andrewcole50@gmail.com>
+* SYSTEM(1021)<4>. When I run that on my system
+* "Copyright (c) 2018 jBASE International. All rights reserved".
+*
+X=SYSTEM(1021)<4>
+IF INDEX(X,'jBASE',1) THEN CRT 'jBASE' ; STOP
+*
+* Probe for Unidata/Universe
+* From: http://www.rsusers.com/cms/pages/wiki.wsp?page=112 (What's the min ver for this?)
+*
+X=SYSTEM(9010)
+IF INDEX(X,'UD',1) THEN CRT 'UD' ; STOP
+IF INDEX(X,'UV',1) THEN CRT 'UV' ; STOP
+*
+* Probe for OpenQM - this is pretty weak sauce
+*
+X=SYSTEM(1012)
+IF X # '' THEN CRT 'QM' ; STOP
+*
+* Probe for D3/Cache
+* https://www3.rocketsoftware.com/rocketd3/support/documentation/d3nt/103/refman/index.htm
+* crt system(100)
+* D3UNIX:RS6000;AIX;pick0:prod0;2;3;000047311000;6.0.0.m0;27 May 2001
+*
+X=SYSTEM(100)
+IF INDEX(X,'D3',1) THEN CRT 'D3' ; STOP
+IF INDEX(X,'CACHE',1) THEN CRT 'CACHE' ; STOP
+*
+* No matches, let's display all possible values
+*
+CRT 'No match, does anything in this list look good?'
+FOR F=1 TO 10000
+  IF SYSTEM(F) # "" AND SYSTEM(F) # 0 THEN CRT F, SYSTEM(F)
+NEXT F
