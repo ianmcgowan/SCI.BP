@@ -20,11 +20,6 @@ X=SYSTEM(9010)
 IF INDEX(X,'UD',1) THEN CRT 'UD' ; STOP
 IF INDEX(X,'UV',1) THEN CRT 'UV' ; STOP
 *
-* Probe for OpenQM - this is pretty weak sauce
-*
-X=SYSTEM(1012)
-IF X # '' THEN CRT 'QM' ; STOP
-*
 * Probe for D3/Cache
 * https://www3.rocketsoftware.com/rocketd3/support/documentation/d3nt/103/refman/index.htm
 * crt system(100)
@@ -33,6 +28,11 @@ IF X # '' THEN CRT 'QM' ; STOP
 X=SYSTEM(100)
 IF INDEX(X,'D3',1) THEN CRT 'D3' ; STOP
 IF INDEX(X,'CACHE',1) THEN CRT 'CACHE' ; STOP
+*
+* Probe for OpenQM - this is pretty weak sauce, do this last
+*
+X=SYSTEM(1012)
+IF X # '' AND X # 0 THEN CRT 'QM' ; STOP
 *
 * No matches, let's display all possible values
 *
