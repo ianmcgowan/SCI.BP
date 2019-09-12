@@ -10,8 +10,8 @@
 * SYSTEM(1021)<4>. When I run that on my system
 * "Copyright (c) 2018 jBASE International. All rights reserved".
 *
-X=SYSTEM(1021)<4>
-IF INDEX(X,'jBASE',1) THEN CRT 'jBASE' ; STOP
+X=OCONV(SYSTEM(1021)<4>, 'MCU')
+IF INDEX(X,'JBASE',1) THEN CRT 'jBASE' ; STOP
 *
 * Probe for Unidata/Universe
 * From: http://www.rsusers.com/cms/pages/wiki.wsp?page=112 (What's the min ver for this?)
