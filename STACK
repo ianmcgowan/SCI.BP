@@ -1,9 +1,10 @@
 ***************************************************************************
 * Program: STACK
 * Author : Ian McGowan
-* Date   : 06/13/89
-* Version: 2019-09-09
-* Comment: Stacks TCL commands
+* Created: 1989-06-13
+* Updated: 2019-09-13
+* License: (c) 1989-2019 Ian McGowan, released under MIT license
+* Comment: Stacks TCL commands, utilities for programmers
 ***************************************************************************
 * https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
 CRT 'Version 2019-09 Autocomplete'
