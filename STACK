@@ -2,11 +2,11 @@
 * Program: STACK
 * Author : Ian McGowan
 * Date   : 06/13/89
-* Version: 2019-09-03
+* Version: 2019-09-09
 * Comment: Stacks TCL commands
 ***************************************************************************
 * https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
-CRT 'Version 2019-08-29'
+CRT 'Version 2019-09 Autocomplete'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
 EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
@@ -41,6 +41,10 @@ WRITE R ON VOC, HOME.FILE
 OPEN HOME.FILE TO HOME.F ELSE STOP 201, HOME.FILE
 OPEN 'CTLGTB' TO CTLGTB ELSE STOP 201,'CTLGTB'
 OPEN 'CTLG'   TO CTLG   ELSE STOP 201,'CTLG'
+OPEN 'STACK.AC' TO AC ELSE
+  EXECUTE \CREATE.FILE STACK.AC 967,8192\
+  OPEN 'STACK.AC' TO AC ELSE ABORT
+END
 *
 SETTINGS      = ';'        ;* DEFAULT COMMAND SEPERATOR
 SETTINGS<2>   = '.'        ;* DEFAULT STACK CHAR
@@ -131,7 +135,7 @@ LOOP
   ENTRY = NUL;LEN = LONG.LINE;DISP.LEN=TERM.WIDTH-1-X
   GOSUB GET.INPUT
   ANS=ENTRY
-  * Reread the program and command stack, since they maybe modified
+  * Reread the program and command stack, since they may be modified
   * in another session
   READ PROGRAMS FROM HOME.F, PROGRAM.ITEM ELSE PROGRAMS = NUL
   READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
@@ -223,6 +227,8 @@ DO.COMMAND:
     CASE UPCASE(ANS) = 'OFF' OR UPCASE(ANS) = 'Q'
       GOSUB WRITE.INFO
       STOP
+    CASE FIRST.WORD='AC'
+      GOSUB BUILD.AC
     CASE FIRST.WORD = 'ALIAS'
       GOSUB DO.ALIAS
     CASE FIRST.WORD = 'SE'
@@ -347,7 +353,7 @@ DO.ALIAS:
     I = I + 1
   REPEAT
   BEGIN CASE
-   CASE AL = NUL AND STRING = NUL
+    CASE AL = NUL AND STRING = NUL
       GOSUB LIST.ALIAS
     CASE STRING = NUL
       GOSUB LIST.ONE.ALIAS
@@ -420,7 +426,7 @@ EXPAND.ALIASES:
   LOOP
     R = ANS<1,POS>
   UNTIL R = NUL DO
-   LOCATE R IN ALIASES<1> BY 'AL' SETTING P THEN ANS<1,POS> = ALIASES<2,P>
+    LOCATE R IN ALIASES<1> BY 'AL' SETTING P THEN ANS<1,POS> = ALIASES<2,P>
     POS = POS + 1
   REPEAT
   SWAP @VM WITH SPC IN ANS
@@ -1485,7 +1491,7 @@ GET.LINE:
       CASE ASC.CH = 8
         GOSUB BACK
       CASE ASC.CH = 9
-        GOSUB FORWARD.WORD
+        GOSUB AUTO.COMPLETE
       CASE ASC.CH = 10
         GOSUB DEL.TO.END
       CASE ASC.CH = 13
@@ -1533,26 +1539,84 @@ GET.LINE:
   ENTRY=XXDATA
 RETURN
 *
-*COMPLETE:
-*  * Grab the current word and figure out max completion
-*  WORD=''
-*  CH.PTR.TMP=CH.PTR-1
-*  LOOP
-*    C=XXDATA[CH.PTR.TMP,1]
-*  UNTIL C=' ' OR CH.PTR.TMP=0 DO
-*    WORD=C:WORD
-*    CH.PTR.TMP-=1
-*  REPEAT
-*  PRINT @(0):"*":WORD:"*":
-*  INPUT AAA:
-*  EXECUTE \SSELECT VOC = "\:WORD:\]"\ CAPTURING DUMMY
-*  READNEXT V ELSE V=''
-*  LOOP
-*     READNEXT DUMMY ELSE EXIT
-*  REPEAT
-*  PRINT @(0):'#':V:'#':
-*  INPUT AAA:
-*RETURN
+AUTO.COMPLETE:
+  * Grab the current word and figure out max completion
+  WORD='' ; WORD.CTR=''
+  CH.PTR.TMP=CH.PTR-1
+  LOOP
+    C=XXDATA[CH.PTR.TMP,1]
+  UNTIL C=' ' OR CH.PTR.TMP=0 DO
+    WORD=C:WORD
+    CH.PTR.TMP-=1
+  REPEAT
+  *
+  * Count which word we're on - there are different auto-completes for 1, 2 or 3+
+  IF CH.PTR.TMP=0 THEN
+    WORD.CTR=1 ;* Trying to autocomplete a command
+    WORD='CMD_':WORD
+  END ELSE
+    CH.PTR.TMP-=1
+    LOOP
+      C=XXDATA[CH.PTR.TMP,1]
+    UNTIL C=' ' OR CH.PTR.TMP=0 DO
+      CH.PTR.TMP-=1
+    REPEAT
+    IF CH.PTR.TMP=0 THEN
+      WORD.CTR=2 ;* Trying to autocomplete a filename
+      WORD='FILE_':WORD
+    END ELSE
+      WORD.CTR=3 ;* Trying to autocomplete from a dictionary
+      FNAME=FIELD(XXDATA,' ',2)
+      WORD='DICT-':FNAME:'_':WORD
+    END
+  END
+  *
+  IF XXDATA[CURR.LEN,1] = SPC THEN XXDATA = XXDATA[1,CURR.LEN-1]
+  CURR.LEN=LEN(XXDATA)
+  *
+  LOOP
+    READ AC.LIST FROM AC, WORD ELSE CRT BEEP: ; RETURN
+    * Ok, we have some auto-completion candidates, need to do two things
+    * 1) Check to see if we're done, return if so, or
+    * 2) List top 20 possible completions if there are more than one
+    IF DCOUNT(AC.LIST<1>,@VM)=1 AND DCOUNT(AC.LIST<2,1>,@SVM)=1 THEN
+      NEWF=AC.LIST<2>[LEN(WORD)+1,999]
+      XXDATA:=NEWF:' '
+      PRINT BASE:XXDATA:EOS:
+      CURR.LEN=LEN(XXDATA)
+      GOSUB GO.END
+      RETURN
+    END ELSE
+      CRT CS:@(0,0):BON:PROMPT.DISP:BOFF:XXDATA
+      NUM.CP=DCOUNT(AC.LIST<1>,@VM)
+      IF NUM.CP>20 THEN NUM.CP=20
+      FOR CP=1 TO NUM.CP
+        CRT CP'R#2':') ':FIELD(AC.LIST<1,CP>,'_',2,99):' (':
+        NUM.CP2=DCOUNT(AC.LIST<2,CP>,@SVM)
+        NUM.CP2.MAX=NUM.CP2
+        IF NUM.CP2>3 THEN NUM.CP2=3
+        FOR CP2=1 TO NUM.CP2
+          CRT FIELD(AC.LIST<2,CP,CP2>,'_',2,99):
+          IF CP2<NUM.CP2 THEN CRT ',':
+        NEXT CP2
+        IF NUM.CP2 # NUM.CP2.MAX THEN CRT ' [+':NUM.CP2.MAX-NUM.CP2:']':
+        CRT ')'
+      NEXT CP
+      WORD.CONTINUE=IN()
+      ASC.VAL = SEQ(WORD.CONTINUE)
+      CRT CS:@(0,0):BON:PROMPT.DISP:BOFF:XXDATA:
+      BEGIN CASE
+        CASE ASC.VAL=13 OR ASC.VAL=27
+          CURR.LEN=LEN(XXDATA)
+          GOSUB GO.END
+          RETURN
+        CASE ASC.VAL>=32 AND ASC.VAL<127
+          WORD:=WORD.CONTINUE
+          XXDATA:=WORD.CONTINUE
+      END CASE
+    END
+  REPEAT
+RETURN
 *
 ORD:
   * Ordinary key pressed
@@ -1622,7 +1686,7 @@ FORWARD.WORD:
   * Tab key pressed - move forwards a word
   IF CH.PTR >= CURR.LEN THEN
     PRINT BEEP:
- END ELSE
+  END ELSE
     LOOP
       CH.PTR = CH.PTR + 1
       CP = CP + 1
@@ -1794,7 +1858,7 @@ RETURN
 *
 GO.END:
   * Move to the end of data and redisplay
- IF XXDATA[CURR.LEN,1] # SPC THEN
+  IF XXDATA[CURR.LEN,1] # SPC THEN
     XXDATA = XXDATA:SPC
     CURR.LEN = CURR.LEN + 1
   END
@@ -2294,12 +2358,12 @@ SQL.FILE:
   SELECT.HDR=''
   FILE=FIELD(ANS,' ',2) ;* Spaces in file name are not supported
   OSREAD SELECT.COMMAND FROM FILE THEN
-    CONVERT @AM TO ' ' IN SELECT.COMMAND
-    SWAP CHAR(13):CHAR(10) WITH ' ' IN SELECT.COMMAND
-    GOSUB IL10.SEL
-  END ELSE
-    CRT FILE:' not found'
-  END
+  CONVERT @AM TO ' ' IN SELECT.COMMAND
+  SWAP CHAR(13):CHAR(10) WITH ' ' IN SELECT.COMMAND
+  GOSUB IL10.SEL
+END ELSE
+  CRT FILE:' not found'
+END
 RETURN
 *
 SQL.SEL.LIST:
@@ -2522,3 +2586,81 @@ LIST.PARAM:
     PRINT '|':P<1,F>'L#18':'|':P<2,F>'L#33':'|':P<3,F>'L#30':'|'
   NEXT F
 RETURN
+*
+BUILD.AC:
+  * Check for a DICT request
+  IF FIELD(ANS,' ',2)='DICT' THEN
+    DICT=FIELD(ANS,' ',3)
+    OPEN 'DICT',DICT TO DVAR ELSE CRT 'Cannot open DICT':DICT ; RETURN
+    SELECT DVAR
+    ID.LIST=''
+    LOOP
+      READNEXT ID ELSE EXIT
+      READ R FROM DVAR, ID ELSE CONTINUE
+      IF R<1>='D' OR R<1>='I' OR R<1>='V' THEN
+        ID.LIST<-1>='DICT-':DICT:'_':ID
+      END
+    REPEAT
+    GOSUB ADD.TO.AC
+    RETURN
+  END
+  *
+  * Build auto-complete list of VOC commands
+  CLEARFILE AC
+  L1='' ; L2=''
+  *
+  EXECUTE \SELECT VOC WITH F1 = "C" "V"\ RTNLIST L1
+  ID.LIST=''
+  LOOP
+    READNEXT ID FROM L1 ELSE EXIT
+    READ R FROM VOC, ID ELSE CONTINUE
+    ID.LIST<-1>='CMD_':ID
+  REPEAT
+  GOSUB ADD.TO.AC
+  *
+  * Build auto-complete list for filenames
+  *
+  EXECUTE \SELECT VOC WITH F1 = "F" "LF" "DIR" "LD" AND WITH @ID # "TMP]"\ RTNLIST L1
+  ID.LIST=''
+  LOOP
+    READNEXT ID FROM L1 ELSE EXIT
+    READ R FROM VOC, ID ELSE CONTINUE
+    ID.LIST<-1>='FILE_':ID
+    IF R<1>='LF' OR R<1>='LD' THEN
+      * Multi-level file or dir, dive deeper
+      E=\SELECT DICT \:ID:\ WITH @ID = "@]" AND WITH F1 = "LF" "LD" USING DICT VOC\
+      *CRT E
+      EXECUTE E RTNLIST L2 CAPTURING DUMMY
+      LOOP
+        READNEXT ID2 FROM L2 ELSE EXIT
+        ID2=ID:',':ID2[2,99]
+        ID.LIST<-1>='FILE_':ID2
+      REPEAT
+    END
+  REPEAT
+  GOSUB ADD.TO.AC
+RETURN
+*
+ADD.TO.AC:
+  NUM.ITEMS=DCOUNT(ID.LIST,@AM)
+  CRT NUM.ITEMS:' ITEMS'
+  FOR I=1 TO NUM.ITEMS
+    ID=ID.LIST<I>
+    L=LEN(ID)
+    FOR C=1 TO LEN(ID)
+      PRE=ID[1,C]
+      READ NODE FROM AC, PRE ELSE NODE=''
+      * Now insert pointers to one level down
+      PTR=ID[1,C+1]
+      LOCATE PTR IN NODE<1> BY 'AL' SETTING POS THEN
+        LOCATE ID IN NODE<2,POS> BY 'AL' SETTING POS2 ELSE NULL
+        INS ID BEFORE NODE<2,POS, POS2>
+      END ELSE
+        INS PTR BEFORE NODE<1,POS>
+        INS ID  BEFORE NODE<2,POS>
+      END
+      WRITE NODE ON AC, PRE
+    NEXT C
+  NEXT I
+RETURN
+*
