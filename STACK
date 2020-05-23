@@ -2,44 +2,46 @@
 * Program: STACK
 * Author : Ian McGowan
 * Created: 1989-06-13
-* Updated: 2019-09-13
+* Updated: 2020-05-14
 * License: (c) 1989-2019 Ian McGowan, released under MIT license
 * Comment: Stacks TCL commands, utilities for programmers
 ***************************************************************************
 * https://github.com/ianmcgowan/SCI.BP/blob/master/STACK
-CRT 'Version 2019-09 Autocomplete'
+CRT 'Version 2020-05-12 ESC,ESC'
 EQUATE INSERT TO '1',REPLACE TO '-1',BEEP TO CHAR(7)
 EQUATE RET TO 13, ESC TO 27, UP.KEY TO 1, DOWN.KEY TO 2
-EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22
+EQUATE PG.UP.KEY TO 21, PG.DOWN.KEY TO 22, SEARCH.KEY TO 18
 EQUATE NUL TO '',SPC TO ' ',TRUE TO 1, FALSE TO 0
 EQUATE SEARCH TO '~', UNIX TO '!'
 EQUATE BELL TO CHAR(7), OTHERWISE TO 1
 TERM=UPCASE(GETENV("TERM"))
 CS=@(-1);EOL=@(-4);EOS=@(-3);UP=@(-10);BON=@(-81);BOFF=@(-82)
 PROMPT NUL
+IF SYSTEM(33) = "Windows NT" THEN
+  OS.PATH.DELIM = "\"
+END ELSE
+  OS.PATH.DELIM = "/"
+END
 *
 LONG.LINE = 9999;LIST.DET.FLAG=0;TIME.COMMAND=0
 EXECUTING = FALSE;SL.ACTIVE = FALSE
 *
-PWD=GETENV("PWD")
+PWD=@ACCOUNT
 I=LEN(PWD) ; ACC=NUL
 FOR F=I TO 1 STEP -1
-  IF PWD[F,1] = '/' THEN EXIT
+  IF PWD[F,1] = OS.PATH.DELIM THEN EXIT
   ACC=PWD[F,1]:ACC
 NEXT F
 *
 USERNAME=UPCASE(@LOGNAME)
-HOME.DIR=GETENV("HOME")
 STACK.ITEM='.STACK_':USERNAME
 ALIAS.ITEM='.STACK.ALIAS_':USERNAME
 PROGRAM.ITEM='.STACK.PROGRAM_':USERNAME
 SETTING.ITEM='.STACK.SETTING_':USERNAME
-HOME.FILE='HOME.':UPCASE(USERNAME)
+HOME.FILE='HOME.STACK'
+OPEN HOME.FILE TO HOME.F ELSE STOP 201, HOME.FILE
 OPEN 'VOC' TO VOC ELSE STOP 201,'VOC'
 OPEN '_HOLD_' TO HOLD ELSE STOP 201,'_HOLD_' ;* Exists in every Unidata account
-R='DIR' ; R<2>=HOME.DIR ; R<3>='D_VOC'
-WRITE R ON VOC, HOME.FILE
-OPEN HOME.FILE TO HOME.F ELSE STOP 201, HOME.FILE
 OPEN 'CTLGTB' TO CTLGTB ELSE STOP 201,'CTLGTB'
 OPEN 'CTLG'   TO CTLG   ELSE STOP 201,'CTLG'
 OPEN 'STACK.AC' TO AC ELSE
@@ -60,7 +62,7 @@ SETTINGS<10>  = FALSE      ;* DEFAULT = CONVERT TO UCASE
 SETTINGS<11>  = ""         ;* DEFAULT STARTUP COMMAND
 SETTINGS<12>  = "#R#A>"    ;* DEFAULT PROMPT
 SETTINGS<13>  = -2         ;* DEFAULT X DISPLACEMENT FOR PROMPT
-SETTINGS<14>  = "bash"     ;* DEFAULT SHELL FOR UNIX COMMANDS
+SETTINGS<14>  = "bash -i"  ;* DEFAULT SHELL FOR UNIX COMMANDS
 SETTINGS<15>  = ""         ;* DEFAULT PROGRAM STACK TO USE
 *
 READ R FROM HOME.F, SETTING.ITEM ELSE R=NUL
@@ -96,7 +98,7 @@ EXEC.LINE="!hostname" ; CAP.ACTIVE=TRUE ; GOSUB EXEC.SUB
 HOST.NAME=EXEC.CAP<1>
 *
 READ STACK FROM HOME.F, STACK.ITEM ELSE STACK = NUL
-PRINT DCOUNT(STACK,@AM):' commands in stack ':HOME.DIR:'/':HOME.FILE
+PRINT DCOUNT(STACK,@AM):' commands in stack ':HOME.FILE
 READ ALIASES FROM HOME.F, ALIAS.ITEM ELSE ALIASES = NUL
 * Override with my favorites for now.  It's a pain to manage per system.
 ALIASES<1>='ACTIVE'
@@ -108,23 +110,39 @@ ALIASES<2,3>='LIST LS.MASTER'
 OLD.X.DISP=X.DISP
 RTN=NUL
 * IL9/IL10 Check
+IL.DB=''
 IL.VER=''
 OPEN 'ACCOUNT.PARAMS' TO ACCOUNT.PARAMS THEN
   READ R FROM ACCOUNT.PARAMS, 'VERSION' ELSE R=''
   IL.DB=PWD
   IL.VER=R<4>:'/':R<8>:'.':R<26>
 END ELSE
-  EXECUTE \!cat DBConfig.xml | grep DataSource | awk -F '[<>]' '{print $3}'\ CAPTURING JDBC
-  JDBC=JDBC<1>
-  EXECUTE \!grep \:JDBC:\ ../../jdbc-bridge/bin/jdbc.properties | grep -v "^#" | grep url\ CAPTURING IL.DB
-  IL.DB=IL.DB<1>
+  OSREAD JDBC FROM 'DBConfig.xml' THEN
+    CONVERT CHAR(13) TO '' IN JDBC
+    CONVERT CHAR(10) TO @AM IN JDBC
+    JDBC=JDBC<2> ;* <DataSource>InfoLease</DataSource>
+    JDBC=FIELD(JDBC,'>', 2)
+    JDBC=FIELD(JDBC,'<', 1)
+    IF JDBC # '' THEN
+      OSREAD JDBC.P FROM '../../jdbc-bridge/bin/jdbc.properties' THEN
+        CONVERT CHAR(13) TO '' IN JDBC.P
+        CONVERT CHAR(10) TO @AM IN JDBC.P
+        FOR F=1 TO DCOUNT(JDBC.P,@AM)
+          L=JDBC.P<F>
+          IF JDBC=FIELD(L,'.',1) AND INDEX(L,'url',1) THEN IL.DB=L
+        NEXT F
+      END
+    END
+  END
   OSREAD VER FROM 'version.properties' ELSE VER='il.version=10'
+  CONVERT CHAR(13) TO '' IN VER
   CONVERT CHAR(10) TO @AM IN VER
   FOR F=1 TO DCOUNT(VER,@AM)
     IF FIELD(VER<F>,'=',2) # '' THEN IL.VER=FIELD(VER<F>,'=',2) ; EXIT
   NEXT F
 END
 CRT IL.VER:' ':IL.DB
+CRT ; CRT 'INFO to return to Infolease'
 IF STARTUP # NUL THEN ANS=STARTUP ; GOSUB COMMAND ; STARTUP=NUL
 ANS=NUL
 *
@@ -155,6 +173,8 @@ GET.INPUT:
 RETURN
 *
 COMMAND:
+  SEARCH.FOR=NUL
+  START.WORD.SEARCH = 1
   MAX.STACK=DCOUNT(STACK,@AM)
   BEGIN CASE
       * Map up and down arrows to .R1 and .Rn
@@ -176,6 +196,9 @@ COMMAND:
       IF P2 < 20 THEN P2=20
       IF P1 < 1 THEN P1=1
       ANS = '.L':P1:',':P2
+    CASE RTN = SEARCH.KEY
+      SEARCH.FOR=ANS
+      GO SEARCH.COMMAND
     CASE ANS='?'
       ANS='.H'
   END CASE
@@ -183,7 +206,6 @@ COMMAND:
   UNIX.COMMAND=FALSE
   IF ANS[1,1] = UNIX THEN UNIX.COMMAND=TRUE
   OLD.STACK = STACK
-  START.WORD.SEARCH = 1
   COMMAND.LIST = ANS
   COMMAND.COUNT = 1
   IF STARTUP#NUL THEN EXECUTING=TRUE ELSE EXECUTING=FALSE
@@ -209,7 +231,6 @@ DO.COMMAND:
   END
   IF ANS='!' THEN ANS='!':DEF.SHELL
   LEN.ANS = LEN(ANS)
-  SEARCH.FOR=NUL
   CAP.ACTIVE=FALSE
   FIRST.WORD=FIELD(ANS,' ',1)
   UPDATE.STACK.FLAG=TRUE
@@ -223,6 +244,7 @@ DO.COMMAND:
       GOSUB PROG.COMMAND
       UPDATE.STACK.FLAG=FALSE
     CASE ANS[1,1] = SEARCH
+      ANS=ANS[2,999]
       GOSUB SEARCH.COMMAND
       UPDATE.STACK.FLAG=FALSE
     CASE UPCASE(ANS) = 'OFF' OR UPCASE(ANS) = 'Q'
@@ -244,6 +266,7 @@ DO.COMMAND:
       DATA 0
       DATA 0
       IF CONTRACT # '' THEN
+        CONVERT '_' TO '-' IN CONTRACT
         CONVERT '.' TO '-' IN CONTRACT
         DATA FIELD(CONTRACT,'-',1)
         DATA FIELD(CONTRACT,'-',2,2)
@@ -257,6 +280,7 @@ DO.COMMAND:
       DATA 0
       DATA 0
       IF CONTRACT # '' THEN
+        CONVERT '_' TO '-' IN CONTRACT
         CONVERT '.' TO '-' IN CONTRACT
         DATA FIELD(CONTRACT,'-',1)
         DATA FIELD(CONTRACT,'-',2,2)
@@ -289,6 +313,15 @@ DO.COMMAND:
     CASE ANS = 'ICONV'
       CONV='I'
       GOSUB CONV
+    CASE ANS = 'KEYS'
+      LOOP
+        CRT 'PRESS A KEY, / to exit:':
+        CH=IN()
+        ASC.CH = SEQ(CH)
+        IF ASC.CH >= 32 AND ASC.CH < 127 THEN CRT CH:'=': ELSE CRT ' =':
+        CRT ASC.CH
+      UNTIL CH='/' DO
+      REPEAT
     CASE ANS = 'OCONV'
       CONV='O'
       GOSUB CONV
@@ -510,21 +543,21 @@ STACK.COMMAND:
       OLD.X.DISP=X.DISP
     CASE ANS = '.H'
       CRT '--------------------------- TCL STACK COMMANDS --------------------------------'
-      CRT 'Ctrl-A      Start of line              Ctrl-R           Toggle insert mode'
+      CRT 'Ctrl-A      Start of line              Ctrl-R           Search'
       CRT 'Ctrl-B      Back one char              Ctrl-U           Page Up'
       CRT 'Ctrl-D      Delete char                Ctrl-V           Page Down'
       CRT 'Ctrl-E      End of line                Ctrl-W           Delete word'
       CRT 'Ctrl-F      Forward char               Ctrl-X           Forward word'
       CRT 'Ctrl-G      Cancel line                Ctrl-Z           Back word'
-      CRT 'Ctrl-I      Forward word               ~xyz             Search for xyz'
+      CRT 'Ctrl-I/tab  Next Word                  ~xyz             Search for xyz'
       CRT 'Ctrl-J      Delete to end              .D               Toggle detail off/on'
       CRT 'Ctrl-L      Clear screen               .Lm,n            List entry m thru n'
-      CRT 'Ctrl-M      Accept line                .Rn              Restore entry n, edit'
-      CRT 'Ctrl-N      Next line                  .H               Help'
+      CRT 'Ctrl-M/rtn  Accept line                .Rn              Restore entry n, edit'
+      CRT 'Ctrl-N      Next line                  .H/?             Help'
       CRT 'Ctrl-P      Previous line              Q/INFO           Quit back to TCL'
       CRT '---------------------- PROGRAM STACK COMMANDS ---------------------------------'
-      CRT '/           List the active prog stack'
-      CRT '/LL         List available prog stacks /L BLAH          Switch stack to BLAH'
+      CRT '/           List the programs in the current project'
+      CRT '/LL         List available projects    /L BLAH          Switch/create project'
       CRT '/Nx         Add a New program          /Fx              Format the x`th program'
       CRT '/Ex         Edit the x`th program      /WW              Edit the program list'
       CRT '/Wx         VI the x`th program        /S               Sort the program stack'
@@ -546,7 +579,7 @@ STACK.COMMAND:
       CRT '                              ---INFOLEASE---'
       CRT 'BPI         List table definitions                        - BPI LS.CTD.PYMTHIST'
       CRT 'CHECK.FILE  Show strings in a compiled program /P|/S    - CHECK.FILE DISP.00 /P'
-      CRT '{C}CI/CM/TM {Customer}Contract Inquiry/Maintenance/Table Maintenance'
+      CRT '{C}CI/CM/TM {Customer}Contract Inquiry/Maint/Table Maint             CI 100.1.1'
       CRT 'FIND.MENU   Search the menus                                   - FIND.MENU VOID'
       CRT 'PARAM       Show parameter file mapping'
       CRT 'RS          Edit a recall                                       RS DK.AUDIT.RPT'
@@ -598,7 +631,7 @@ EDIT:
   * Some of the stuff in here is redundant, repeating COMMAND
   * but to gosub command introduces re-entrancy problems
   * That's why we use the dreaded GOTO command
-  N = ANS[3,LEN.ANS]
+  N = ANS[3,LEN.ANS] ;* .R23
   IF NOT(NUM(N)) THEN PRINT 'No such line number - ':N:BELL;RETURN
   IF N = NUL THEN N = 1
   LOOP WHILE N # NUL AND STACK<N> # NUL DO
@@ -612,13 +645,11 @@ EDIT:
       ANS = ENTRY
     END
     BEGIN CASE
+      CASE RTN = SEARCH.KEY
+        IF SEARCH.FOR # NUL THEN GO SEARCH.COMMAND
       CASE RTN = UP.KEY
-        IF SEARCH.FOR # NUL THEN
-          GO SEARCH.COMMAND
-        END ELSE
-          N = N + 1
-          IF STACK<N> = NUL THEN N = 1
-        END
+        N = N + 1
+        IF STACK<N> = NUL THEN N = 1
       CASE RTN = DOWN.KEY
         N = N - 1
         IF N = 0 THEN
@@ -653,7 +684,7 @@ RETURN
 *
 SEARCH.COMMAND:
   * Search the stack for a string
-  IF SEARCH.FOR = NUL THEN SEARCH.FOR = ANS[2,LONG.LINE]
+  *IF SEARCH.FOR = NUL THEN SEARCH.FOR = ANS ; CRT 'ANS:': ; INPUT AAA
   FOUND = FALSE
   FOR F = START.WORD.SEARCH TO MAX.STACK UNTIL FOUND OR STACK<F> = NUL
     IF INDEX(STACK<F,4>,SEARCH.FOR,1) # 0 THEN FOUND = TRUE
@@ -1092,7 +1123,7 @@ DDD:
   * Tweak DICT VOC with some pickle juice
   R    =\DICT VOC#AM#@ID#AM#D#AM#0#AM##AM#VOC#AM#30L#AM#S#AM#\
   R<-1>=\DICT VOC#AM#F1#AM#D#AM#1#AM##AM##AM#5L#AM#S#AM#\
-  R<-1>=\DICT VOC#AM#F2#AM#D#AM#2#AM##AM##AM#50L#AM#S#AM#\
+  R<-1>=\DICT VOC#AM#F2#AM#D#AM#2#AM##AM##AM#50R#AM#S#AM#\
   OPEN 'DICT VOC' TO FVAR ELSE RETURN
   FOR F=1 TO DCOUNT(R,@AM)
     REC=R<F>
@@ -1108,7 +1139,7 @@ DDD:
   SSTR = FIELD(ANS," ",3)
   FIND.STR=""
   IF SSTR # "" THEN FIND.STR = \WITH @ID = "[\:SSTR:\]" \
-  EXEC.LINE=\SORT DICT \:FILE:\ @ID F1 F2 BY F1 BY F2 \:FIND.STR:\ USING DICT VOC (I \
+  EXEC.LINE=\SORT DICT \:FILE:\ @ID F1 F2 BY F1 \:FIND.STR:\ USING DICT VOC (I \
   GOSUB EXEC.SUB
 RETURN
 *
@@ -1492,7 +1523,7 @@ GET.LINE:
       CASE ASC.CH = 8
         GOSUB BACK
       CASE ASC.CH = 9
-        GOSUB AUTO.COMPLETE
+        GOSUB FORWARD.WORD
       CASE ASC.CH = 10
         GOSUB DEL.TO.END
       CASE ASC.CH = 13
@@ -1505,7 +1536,8 @@ GET.LINE:
         RTN=1
         EXIT.FLAG=TRUE
       CASE ASC.CH = 18
-        GOSUB INSRT
+        EXIT.FLAG=TRUE
+        RTN=SEARCH.KEY
       CASE ASC.CH = PG.UP.KEY
         EXIT.FLAG=TRUE
         RTN=PG.UP.KEY
@@ -1749,11 +1781,6 @@ BACK:
   END
 RETURN
 *
-INSRT:
-  * Toggle between insert and replace modes
-  MODE = -MODE
-RETURN
-*
 ESC.KEY:
   * ESC pressed, or extended key - wyse50 arrow keys
   * Get next char of extended command
@@ -1764,6 +1791,11 @@ ESC.KEY:
   BEGIN CASE
     CASE EXT.KEY = 'D'
       GOSUB DELETE.WORD
+    CASE EXT = 27
+      * ESC,ESC is the same as Ctrl-G
+      XXDATA = ''
+      EXIT.FLAG=TRUE
+      RTN=13
     CASE EXT.KEY = '[' OR EXT.KEY = 'O'
       EXT.KEY=IN()
       BEGIN CASE
@@ -1777,6 +1809,28 @@ ESC.KEY:
         CASE EXT.KEY = 'B'
           RTN=2
           EXIT.FLAG=TRUE
+        CASE EXT.KEY = 'Z'
+          GOSUB BACK.WORD
+        CASE EXT.KEY='1'
+          EXT.KEY=IN()
+          GOSUB GO.BEGIN
+        CASE EXT.KEY='2'
+          EXT.KEY=IN()
+          MODE=-MODE
+        CASE EXT.KEY='3'
+          EXT.KEY=IN()
+          GOSUB DEL
+        CASE EXT.KEY='4'
+          EXT.KEY=IN()
+          GOSUB GO.END
+        CASE EXT.KEY='5'
+          EXT.KEY=IN()
+          EXIT.FLAG=TRUE
+          RTN=PG.UP.KEY
+        CASE EXT.KEY='6'
+          EXT.KEY=IN()
+          EXIT.FLAG=TRUE
+          RTN=PG.DOWN.KEY
       END CASE
   END CASE
 RETURN ; * From ESC key
@@ -1945,16 +1999,17 @@ ATB.FIND:
 RETURN
 *
 GET.TERM.WIDTH:
-  T='/tmp/':@LOGNAME:'.term'
-  EXEC.LINE=\!tput cols > \:T ;* Always returns 80 if you capture, so use tmp file
-  CAP.ACTIVE=FALSE
-  GOSUB EXEC.SUB
-  EXEC.LINE=\!cat \:T
-  CAP.ACTIVE=TRUE
-  GOSUB EXEC.SUB
-  TERM.WIDTH=EXEC.CAP<1>
-  EXEC.LINE=\!rm \:T
-  GOSUB EXEC.SUB
+  *T='/tmp/':@LOGNAME:'.term'
+  *EXEC.LINE=\!tput cols > \:T ;* Always returns 80 if you capture, so use tmp file
+  *CAP.ACTIVE=FALSE
+  *GOSUB EXEC.SUB
+  *EXEC.LINE=\!cat \:T
+  *CAP.ACTIVE=TRUE
+  *GOSUB EXEC.SUB
+  *TERM.WIDTH=EXEC.CAP<1>
+  *EXEC.LINE=\!rm \:T
+  *GOSUB EXEC.SUB
+  TERM.WIDTH=132
   EXEC.LINE=\TERM \:TERM.WIDTH ; GOSUB EXEC.SUB
 RETURN
 *
