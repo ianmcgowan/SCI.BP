@@ -1,0 +1,365 @@
+*SUBROUTINE SCI.XLSX.SUB(ARRAY, COLUMNS, FILE.NAME)
+***************************************************************************
+* Program: SCI.XLSX.SUB
+* Author : MCGOWJ01
+* Date   : 2020-06-17
+* Edited : 2020-06-17
+* Comment: Convert a dynamic array into a real excel sheet
+***************************************************************************
+* SEE: https://blogs.msdn.microsoft.com/brian_jones/2006/11/02/simple-spreadsheetml-file-part-1-of-3/
+*      http://polymathprogrammer.com/2010/01/11/custom-column-widths-in-excel-open-xml/
+*
+ARRAY='123-0000000-001,PIP PIP,999.99,2020-01-01'
+ARRAY<2>='123-1234567-001,HELLO DOLLY,123.45,2019-06-27'
+COLUMNS='CONTRACT,CUST_NAME,BALANCE,BOOKING_DATE'
+COLUMNS<2>='A,A,N,D'
+FILE.NAME='EXCEL_TEST'
+CONVERT ',' TO @VM IN ARRAY
+CONVERT ',' TO @VM IN COLUMNS
+OUTPUT.DIR='_HOLD_/':FILE.NAME
+EXCEL.NAME=FILE.NAME:'.xlsx'
+* Create the empty dir structure in _HOLD_ - adjust based on system
+EXECUTE '!rm -rf ':OUTPUT.DIR
+EXECUTE '!mkdir ':OUTPUT.DIR
+EXECUTE '!mkdir ':OUTPUT.DIR:'/_rels'
+EXECUTE '!mkdir ':OUTPUT.DIR:'/xl'
+EXECUTE '!mkdir ':OUTPUT.DIR:'/xl/_rels'
+EXECUTE '!mkdir ':OUTPUT.DIR:'/xl/worksheets'
+*
+CONTROL.CHARS=''
+FOR CHARACTER = 127 TO 249
+  CONTROL.CHARS:=CHAR(CHARACTER)
+NEXT CHARACTER
+*
+GOSUB XLS.HEADER
+MAX.ROW.COUNT=DCOUNT(ARRAY,@AM)
+FOR ROW.COUNT=1 TO MAX.ROW.COUNT
+  ROW=ARRAY<ROW.COUNT>
+  CRT ROW
+  GOSUB XLS.BODY
+NEXT ROW.COUNT
+*GOSUB XLS.TOTALS
+GOSUB XLS.FOOTER
+CLOSE OUTPUT.F
+*
+EXECUTE '!cd ':OUTPUT.DIR:' ; zip -r ':EXCEL.NAME:' *' CAPTURING DUMMY
+RETURN
+*
+XLS.BODY:
+  L='<x:row>' ; GOSUB WRITE.LINE
+  FOR C=1 TO DCOUNT(ROW<1>,@VM)
+    CELL=ROW<1,C>
+    GOSUB URL.ENCODE.CELL
+    FORMAT=COLUMNS<3,C>
+    CELL.NUM=CELL ; CONVERT ',' TO '' IN CELL.NUM
+    BEGIN CASE
+      CASE FORMAT[1,1]='D' AND ICONV(CELL,'D') # '' ;* Date
+        CELL=ICONV(CELL,'D')+24837 ;* 12/31/1967-12/31/1899=24837
+        L='<x:c s="1" t="Date"><x:v>':CELL:'</x:v></x:c>'
+      CASE FORMAT[1,2]='MD' OR FORMAT[1,2]='MR'     ;* Number
+        CONVERT ',' TO '' IN CELL
+        IF NUM(CELL) THEN
+          L='<x:c s="3"><x:v>':CELL:'</x:v></x:c>'
+        END ELSE
+          L='<x:c t="str"><x:v>':CELL:'</x:v></x:c>'
+        END
+      CASE 1 ;* String is default type
+        IF CELL[1,1]='+' THEN CELL=CELL[2,LEN(CELL)] ;* Excel thinks this is a formula
+        IF NUM(CELL.NUM) AND CELL.NUM#'' AND LEN(CELL.NUM) < 8 THEN
+          * It's a number, but leave it unstyled so zip 90210 doesn't become 90210.00
+          L='<x:c><x:v>':CELL:'</x:v></x:c>'
+        END ELSE
+          L='<x:c t="str"><x:v>':CELL:'</x:v></x:c>'
+        END
+    END CASE
+    GOSUB WRITE.LINE
+  NEXT C
+  L='</x:row>'
+  GOSUB WRITE.LINE
+RETURN
+*
+XLS.TOTALS:
+  L='<Row>'
+  GOSUB WRITE.LINE
+  FOR C=1 TO DCOUNT(COLUMNS<1>,@VM)
+    FORMAT=COLUMNS<3,C>
+    IF FORMAT[1,2]='MD' OR FORMAT[1,2]='MR' THEN
+      * Number col, add total to bottom row
+      L='  <Cell ss:Index="':C:'" ss:Formula="=SUM(R[-':ROW.COUNT:']C:R[-1]C)"><Data ss:Type="Number">0</Data></Cell>'
+      GOSUB WRITE.LINE
+    END
+  NEXT C
+  L='</Row>'
+  GOSUB WRITE.LINE
+RETURN
+*
+URL.ENCODE.CELL:
+  * Certain characters not allowed in XML - escape them
+  CONVERT CONTROL.CHARS TO '' IN CELL ;* Zap unicode/other code pages
+  SWAP '&' WITH '&amp;' IN CELL
+  SWAP '<' WITH '&lt;'  IN CELL
+  SWAP '>' WITH '&gt;'  IN CELL
+  CELL=TRIM(CELL);* No benefit to leading or trailing spaces
+RETURN
+*
+XLS.HEADER:
+  * A minimal XLSX sheet consists of 6 files
+  * [Content_Types].xml
+  * _rels/.rels
+  * xl/_rels/workbook.xml.rels
+  * xl/styles.xml
+  * xl/workbook.xml
+  * xl/worksheets/sheet.xml
+  *
+  OUTPUT.FILE.NAME=OUTPUT.DIR:'/[Content_Types].xml'
+  GOSUB OPEN.FILE
+  L='<?xml version="1.0" encoding="utf-8"?>'
+  GOSUB WRITE.LINE
+  L='<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+  GOSUB WRITE.LINE
+  L='    <Default ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml" Extension="xml"/>'
+  GOSUB WRITE.LINE
+  L='    <Default ContentType="application/vnd.openxmlformats-package.relationships+xml" Extension="rels"/>'
+  GOSUB WRITE.LINE
+  L='    <Override ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml" PartName="/xl/worksheets/sheet.xml"/>'
+  GOSUB WRITE.LINE
+  L='    <Override ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml" PartName="/xl/styles.xml"/>'
+  GOSUB WRITE.LINE
+  L='</Types>'
+  GOSUB WRITE.LINE
+  *
+  OUTPUT.FILE.NAME=OUTPUT.DIR:'/_rels/.rels'
+  GOSUB OPEN.FILE
+  L='<?xml version="1.0" encoding="utf-8"?>'
+  GOSUB WRITE.LINE
+  L='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+  GOSUB WRITE.LINE
+  L='  <Relationship Id="Rb5834f0a9fe74ac0" Target="/xl/workbook.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"/>'
+  GOSUB WRITE.LINE
+  L='</Relationships>'
+  GOSUB WRITE.LINE
+  *
+  OUTPUT.FILE.NAME=OUTPUT.DIR:'/xl/_rels/workbook.xml.rels'
+  GOSUB OPEN.FILE
+  L='<?xml version="1.0" encoding="utf-8"?>'
+  GOSUB WRITE.LINE
+  L='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+  GOSUB WRITE.LINE
+  L='  <Relationship Id="R203d98ce4bbc4619" Target="/xl/worksheets/sheet.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/>'
+  GOSUB WRITE.LINE
+  L='  <Relationship Id="R8dd86d2508e64fce" Target="/xl/styles.xml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"/>'
+  GOSUB WRITE.LINE
+  L='</Relationships>'
+  GOSUB WRITE.LINE
+  *
+  * This one controls styles and formats.  It's, complicated.
+  OUTPUT.FILE.NAME=OUTPUT.DIR:'/xl/styles.xml'
+  GOSUB OPEN.FILE
+  L='<?xml version="1.0" encoding="utf-8"?>'
+  GOSUB WRITE.LINE
+  L='<x:styleSheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  GOSUB WRITE.LINE
+  * This section controls number and date formats, and is refered below by the styles. 164=0, 165=1, etc
+  L='    <x:numFmts count="5">'
+  GOSUB WRITE.LINE
+  L='        <x:numFmt formatCode="dd/mm/yyyy" numFmtId="164"/>'
+  GOSUB WRITE.LINE
+  L='        <x:numFmt formatCode="#,##0.0000" numFmtId="165"/>'
+  GOSUB WRITE.LINE
+  L='        <x:numFmt formatCode="#,##0.00" numFmtId="166"/>'
+  GOSUB WRITE.LINE
+  L='        <x:numFmt formatCode="@" numFmtId="167"/>'
+  GOSUB WRITE.LINE
+  L='        <x:numFmt formatCode="mm/dd/yyyy" numFmtId="168"/>'
+  GOSUB WRITE.LINE
+  L='    </x:numFmts>'
+  GOSUB WRITE.LINE
+  L='    <x:fonts count="2">'
+  GOSUB WRITE.LINE
+  L='        <x:font>'
+  GOSUB WRITE.LINE
+  L='            <x:sz val="11"/>'
+  GOSUB WRITE.LINE
+  L='            <x:name val="Calibri"/>'
+  GOSUB WRITE.LINE
+  L='        </x:font>'
+  GOSUB WRITE.LINE
+  L='        <x:font>'
+  GOSUB WRITE.LINE
+  L='            <x:sz val="11"/>'
+  GOSUB WRITE.LINE
+  L='            <x:color tint="-0.499984740745262"/>'
+  GOSUB WRITE.LINE
+  L='            <x:name val="Calibri"/>'
+  GOSUB WRITE.LINE
+  L='        </x:font>'
+  GOSUB WRITE.LINE
+  L='    </x:fonts>'
+  GOSUB WRITE.LINE
+  L='    <x:fills count="2">'
+  GOSUB WRITE.LINE
+  L='        <x:fill>'
+  GOSUB WRITE.LINE
+  L='            <x:patternFill patternType="none"/>'
+  GOSUB WRITE.LINE
+  L='        </x:fill>'
+  GOSUB WRITE.LINE
+  L='        <x:fill>'
+  GOSUB WRITE.LINE
+  L='            <x:patternFill patternType="gray125"/>'
+  GOSUB WRITE.LINE
+  L='        </x:fill>'
+  GOSUB WRITE.LINE
+  L='        <x:fill>'
+  GOSUB WRITE.LINE
+  L='            <x:patternFill patternType="solid">'
+  GOSUB WRITE.LINE
+  L='                <x:fgColor tint="0.79998168889431442"/>'
+  GOSUB WRITE.LINE
+  L='                <x:bgColor indexed="64"/>'
+  GOSUB WRITE.LINE
+  L='            </x:patternFill>'
+  GOSUB WRITE.LINE
+  L='        </x:fill>'
+  GOSUB WRITE.LINE
+  L='    </x:fills>'
+  GOSUB WRITE.LINE
+  L='    <x:borders count="1">'
+  GOSUB WRITE.LINE
+  L='        <x:border>'
+  GOSUB WRITE.LINE
+  L='            <x:left/>'
+  GOSUB WRITE.LINE
+  L='            <x:right/>'
+  GOSUB WRITE.LINE
+  L='            <x:top/>'
+  GOSUB WRITE.LINE
+  L='            <x:bottom/>'
+  GOSUB WRITE.LINE
+  L='            <x:diagonal/>'
+  GOSUB WRITE.LINE
+  L='        </x:border>'
+  GOSUB WRITE.LINE
+  L='    </x:borders>'
+  GOSUB WRITE.LINE
+  L='    <x:cellStyleXfs count="1">'
+  GOSUB WRITE.LINE
+  L='        <x:xf borderId="0" fillId="0" fontId="0" numFmtId="0"/>'
+  GOSUB WRITE.LINE
+  L='    </x:cellStyleXfs>'
+  GOSUB WRITE.LINE
+  L='    <x:cellXfs count="5">'
+  GOSUB WRITE.LINE
+  * These styles are indexed by number from the cell references with <c s="1"> picking numFmtId="165"
+  L='        <x:xf borderId="0" fillId="0" fontId="0" numFmtId="0" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='        <x:xf applyNumberFormat="1" borderId="0" fillId="0" fontId="0" numFmtId="14" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='        <x:xf applyNumberFormat="1" borderId="0" fillId="0" fontId="0" numFmtId="165" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='        <x:xf applyNumberFormat="1" borderId="0" fillId="0" fontId="0" numFmtId="166" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='        <x:xf applyNumberFormat="1" borderId="0" fillId="0" fontId="0" numFmtId="167" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='        <x:xf applyNumberFormat="1" borderId="0" fillId="0" fontId="0" numFmtId="168" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='        <x:xf applyNumberFormat="0" borderId="0" fillId="2" fontId="1" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='    </x:cellXfs>'
+  GOSUB WRITE.LINE
+  L='    <x:cellStyles count="1">'
+  GOSUB WRITE.LINE
+  L='        <x:cellStyle builtinId="0" name="Normal" xfId="0"/>'
+  GOSUB WRITE.LINE
+  L='    </x:cellStyles>'
+  GOSUB WRITE.LINE
+  L='    <x:dxfs count="0"/>'
+  GOSUB WRITE.LINE
+  L='    <x:tableStyles count="0" defaultPivotStyle="PivotStyleLight16" defaultTableStyle="TableStyleMedium9"/>'
+  GOSUB WRITE.LINE
+  L='</x:styleSheet>'
+  GOSUB WRITE.LINE
+  *
+  OUTPUT.FILE.NAME=OUTPUT.DIR:'/xl/workbook.xml'
+  GOSUB OPEN.FILE
+  L='<?xml version="1.0" encoding="utf-8"?>'
+  GOSUB WRITE.LINE
+  L='<x:workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  GOSUB WRITE.LINE
+  L='    <x:fileVersion appName="Microsoft Office Excel"/>'
+  GOSUB WRITE.LINE
+  L='    <x:sheets>'
+  GOSUB WRITE.LINE
+  L='        <x:sheet name="Sheet1" r:id="R203d98ce4bbc4619" sheetId="1"/>'
+  GOSUB WRITE.LINE
+  L='    </x:sheets>'
+  GOSUB WRITE.LINE
+  L='</x:workbook>'
+  GOSUB WRITE.LINE
+  *
+  OUTPUT.FILE.NAME=OUTPUT.DIR:'/xl/worksheets/sheet.xml'
+  GOSUB OPEN.FILE
+  L='<?xml version="1.0"?>'
+  GOSUB WRITE.LINE
+  L='<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  GOSUB WRITE.LINE
+  L='  <x:sheetData>'
+  GOSUB WRITE.LINE
+  *
+  * Now heading values in row 1
+  *
+  * Column definitions
+  FOR C=1 TO DCOUNT(COLUMNS<1>,@VM)
+    NAME=COLUMNS<1,C>
+    FORMAT=COLUMNS<2,C>
+    BEGIN CASE
+      CASE FORMAT='D'  ;* Date
+        STYLE='s102'
+      CASE FORMAT='N' OR FORMAT='N' ;* Number
+        *IF FORMAT[3,1]='0' THEN
+        *  STYLE='s103'
+        *END ELSE
+          STYLE='s101'
+        *END
+      CASE 1 ;* String is default type
+        STYLE='Default'
+    END CASE
+    L='      <Column ss:Index="':C:'" ss:StyleID="':STYLE:'" ss:Width="':30:'"/>'
+    *GOSUB WRITE.LINE
+  NEXT C
+  *
+  * Now write a header row
+  *
+  L='<x:row>'
+  GOSUB WRITE.LINE
+  FOR C=1 TO DCOUNT(COLUMNS<1>,@VM)
+    L='  <x:c s="6" t="str"><x:v>'
+    CELL=TRIM(COLUMNS<1,C>)
+    IF CELL='' THEN CELL='Column ':C
+    GOSUB URL.ENCODE.CELL
+    L:=CELL
+    L:='</x:v></x:c>'
+    GOSUB WRITE.LINE
+  NEXT C
+  L='</x:row>'
+  GOSUB WRITE.LINE
+RETURN
+*
+XLS.FOOTER:
+  L='  </x:sheetData>'
+  GOSUB WRITE.LINE
+  L='</x:worksheet>'
+  GOSUB WRITE.LINE
+RETURN
+*
+OPEN.FILE:
+  EXECUTE '!rm -f ':OUTPUT.FILE.NAME
+  EXECUTE '!touch ':OUTPUT.FILE.NAME
+  OPENSEQ OUTPUT.FILE.NAME TO OUTPUT.F ELSE STOP 'CANNOT OPEN ':OUTPUT.FILE.NAME
+RETURN
+*
+WRITE.LINE:
+  *IF DEBUG THEN PRINT L
+  WRITESEQ L:CHAR(13) APPEND ON OUTPUT.F ELSE STOP 'ERROR WRITING ':FILE.NAME
+RETURN
+*
